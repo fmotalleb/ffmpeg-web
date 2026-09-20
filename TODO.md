@@ -11,7 +11,8 @@
 
 ## Process Control
 
-- [ ] fix: pause/resume process
+- [ ] fix: pause/resume process (should freeze ffmpeg process)
+- [ ] feat: pause/resume after this job
 - [ ] expose process state:
       queued
       starting
@@ -46,8 +47,8 @@
 - [x] draggable comparison divider
 
 - [x] swap source/target display
-- [ ] keyboard shortcut for source/target swap
-- [ ] keyboard shortcut for next/previous frame
+- [x] keyboard shortcut for source/target swap
+- [x] keyboard shortcut for next/previous frame
 
 - [x] magnifier
       - [x] configurable zoom level (using scroll)
