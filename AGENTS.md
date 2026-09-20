@@ -1,0 +1,18 @@
+# Project knowledge
+
+This file gives Freebuff context about your project: goals, commands, conventions, and gotchas.
+
+## Quickstart
+- Setup: `go build -o transcoder .` (requires Go 1.27+, ffmpeg/ffprobe on PATH)
+- Dev: `go run . -root ~/Videos -out ~/Videos/encoded` then open http://127.0.0.1:8723
+- Test: no test files exist yet; run `go vet ./...` and `go build ./...` to check correctness
+
+## Architecture
+- Key directories: `web/` (vanilla JS/CSS/HTML frontend, no build step), root `.go` files (all backend)
+- Data flow: Browser → HTTP API (SSE for real-time) → Go server → ffmpeg process → output files; queue persisted to `queue.json`
+- Core types: `Spec` (encoding config), `Job` (queue item), `Manager` (queue + worker), `Broker` (SSE events), `Store` (persistence)
+
+## Conventions
+- Formatting/linting: standard `gofmt`; no linter configured yet (TODO: golangci-lint v2)
+- Patterns to follow: Go 1.22+ `http.ServeMux` method patterns, `go:embed` for web assets, atomic file writes via temp+rename, path sandboxing via `allowedPath()`
+- Things to avoid: no external dependencies (pure stdlib), don't add `go get` imports, don't bypass path sandboxing, don't encode without checking `-allow-commands`
