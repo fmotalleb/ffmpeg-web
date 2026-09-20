@@ -10,7 +10,7 @@ browser over server-sent events.
 
 ## Requirements
 
-- Go 1.22 or newer (uses the method-pattern `http.ServeMux`)
+- Go 1.27 or newer (uses the method-pattern `http.ServeMux`)
 - `ffmpeg` and `ffprobe` on `PATH` — ffmpeg 6.0+ for `-fpsmax` and `-fps_mode`
 
 ## Run

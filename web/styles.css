@@ -723,7 +723,7 @@ code {
 #thumb-output img {
   border: 1px solid var(--line);
   border-radius: 6px;
-}
+
   right: 3px;
   bottom: 2px;
   font-family: var(--mono);

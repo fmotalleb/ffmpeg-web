@@ -17,5 +17,5 @@ This file gives Freebuff context about your project: goals, commands, convention
 
 ## Conventions
 - Formatting/linting: standard `gofmt`, checked by `golangci-lint` v2 (`.golangci.yml`)
-- Patterns to follow: Go 1.22+ `http.ServeMux` method patterns, `go:embed` for web assets, atomic file writes via temp+rename, path sandboxing via `allowedPath()`
+- Patterns to follow: Go 1.27+ `http.ServeMux` method patterns, `go:embed` for web assets, atomic file writes via temp+rename, path sandboxing via `allowedPath()`
 - Things to avoid: no external dependencies (pure stdlib), don't add `go get` imports, don't bypass path sandboxing, don't encode without checking `-allow-commands`

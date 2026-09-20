@@ -79,7 +79,7 @@
 - [x] show progress
 - [x] show ETA
 - [x] show encoding speed
-- [ ] show approximate output size
+- [ ] show approximate output size (with a per-second refresh rate or less due to need for stat syscall on open file)
 - [x] show FFmpeg command
 
 - [ ] prevent editing jobs that are already running
@@ -115,3 +115,7 @@
 
 - [ ] background job count limiter (ffmpeg spawner for preview or worker)
 - [ ] add subtitle to video, and subtitle metadata
+- [ ] tests for ffmpeg command generator
+- [ ] display ffprobe's results more elegantly
+- [ ] switch logging to zaplog (instance builder using github.com/fmotalleb/go-tools)
+- [ ] switch cli framework to cobra
