@@ -20,6 +20,7 @@ const state = {
   diff: {
     overlayIsTarget: true, magnifier: false, magnifierShowsTarget: true,
     dividerPct: 50, mode: "split", opacity: 50, magZoom: 3,
+    playing: false, syncOffset: 0,
   },
 };
 
@@ -427,6 +428,7 @@ function renderTrackOptions() {
 // yet), or a specific queued/running/finished job (its own saved settings,
 // or its real output once it's done).
 function currentPreviewSubject() {
+  const off = state.diff.syncOffset / 1000; // ms → seconds
   if (state.previewJobId) {
     const job = state.jobs.get(state.previewJobId);
     if (job) {
@@ -439,9 +441,9 @@ function currentPreviewSubject() {
         sourceClip: (t, w) => clipURL(
           `/api/jobs/${job.id}/clip?which=source&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`),
         targetClip: (t, w) => job.status === "done"
-          ? clipURL(`/api/jobs/${job.id}/clip?which=output&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`)
+          ? clipURL(`/api/jobs/${job.id}/clip?which=output&time=${t + off}&duration=${dur}${w ? "&width=" + w : ""}`)
           : clipURLPost("/api/preview/clip",
-            { input: job.source, time: t, duration: dur, width: w || 0, spec: job.spec }),
+            { input: job.source, time: t + off, duration: dur, width: w || 0, spec: job.spec }),
       };
     }
     state.previewJobId = null;
@@ -456,7 +458,7 @@ function currentPreviewSubject() {
       sourceClip: (t, w) => clipURL(
         `/api/clip?path=${encodeURIComponent(state.source.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`),
       targetClip: (t, w) => clipURLPost("/api/preview/clip",
-        { input: state.source.path, time: t, duration: dur, width: w || 0, spec: state.settings }),
+        { input: state.source.path, time: t + off, duration: dur, width: w || 0, spec: state.settings }),
     };
   }
   return null;
@@ -665,7 +667,7 @@ function updateDiffDisplay() {
     $("#diff-overlay").hidden = true;
     $("#diff-handle").hidden = true;
     $("#diff-sbs").hidden = true;
-    $("#diff-canvas").hidden = true;
+    $("#diff-canvas").style.display = "none";
     $("#dl-diff").hidden = true;
     return;
   }
@@ -685,11 +687,22 @@ function applyDiffLayers() {
   overlayEl.src = tgtURL;
   sbsSrc.src = state.previewFrames.sourceURL || "";
   sbsTgt.src = state.previewFrames.targetURL || "";
-  // Play all videos in sync.
-  [baseEl, overlayEl, sbsSrc, sbsTgt].forEach((v) => { v.currentTime = 0; v.play().catch(() => {}); });
-  $("#diff-overlay-label").textContent = overlayIsTarget
-    ? "Overlay: target — drag left to reveal the source"
-    : "Overlay: source — drag left to reveal the target";
+  // Load and optionally play all videos.
+  [baseEl, overlayEl, sbsSrc, sbsTgt].forEach((v) => { v.load(); });
+  if (state.diff.playing) syncPlayAll();
+  // Show "Source" label on the correct side. In split mode the overlay
+  // clips from the right, so the LEFT side is always the overlay and the
+  // RIGHT side is always the base.
+  const origLabel = $("#diff-original-label");
+  if (state.diff.mode === "split") {
+    origLabel.textContent = "Source";
+    // When overlayIsTarget=true, base=source, so source is on the right.
+    origLabel.style.left = overlayIsTarget ? "" : "8px";
+    origLabel.style.right = overlayIsTarget ? "8px" : "";
+    origLabel.hidden = false;
+  } else {
+    origLabel.hidden = true;
+  }
 }
 
 // Shows/hides the right elements for the chosen comparison mode and does any
@@ -699,9 +712,9 @@ function applyComparisonMode() {
   const mode = state.diff.mode;
   const stacked = mode === "split" || mode === "overlay" || mode === "flicker";
 
-  $("#diff-stage").hidden = mode === "side-by-side" || mode === "difference";
+  $("#diff-stage").hidden = mode === "side-by-side";
   $("#diff-sbs").hidden = mode !== "side-by-side";
-  $("#diff-canvas").hidden = mode !== "difference";
+  $("#diff-canvas").style.display = mode === "difference" ? "" : "none";
   $("#diff-opacity-field").hidden = mode !== "overlay";
   $("#dl-diff").hidden = mode !== "difference";
 
@@ -710,6 +723,13 @@ function applyComparisonMode() {
   $("#diff-handle").hidden = mode !== "split";
   $("#diff-base").style.visibility = "";
   $("#diff-overlay").style.visibility = "";
+  // In difference mode, keep videos loaded but invisible so drawImage works.
+  if (mode === "difference") {
+    $("#diff-base").hidden = false;
+    $("#diff-overlay").hidden = false;
+    $("#diff-base").style.visibility = "hidden";
+    $("#diff-overlay").style.visibility = "hidden";
+  }
 
   const magnifierApplicable = stacked;
   $("#diff-magnifier-field").hidden = !magnifierApplicable;
@@ -726,10 +746,16 @@ function applyComparisonMode() {
     $("#diff-overlay").style.clipPath = "inset(0)";
     $("#diff-overlay").style.opacity = String(state.diff.opacity / 100);
   } else if (mode === "flicker") {
+    pauseAll();
+    state.diff.playing = false;
+    $("#diff-play").textContent = "▶ Play";
     $("#diff-overlay").style.opacity = "1";
     $("#diff-overlay").style.clipPath = "inset(0)";
     startFlicker();
   } else if (mode === "difference") {
+    pauseAll();
+    state.diff.playing = false;
+    $("#diff-play").textContent = "▶ Play";
     renderDifferenceCanvas();
   }
 }
@@ -755,22 +781,45 @@ function stopFlicker() {
   if (flickerTimer) { clearInterval(flickerTimer); flickerTimer = null; }
 }
 
+/* ---------- play / pause / sync ---------- */
+
+function getVideoEls() {
+  return [$("#diff-base"), $("#diff-overlay"), $("#sbs-source"), $("#sbs-target")];
+}
+
+function syncPlayAll() {
+  getVideoEls().forEach((v) => { if (v.src) v.play().catch(() => {}); });
+}
+
+function pauseAll() {
+  getVideoEls().forEach((v) => v.pause());
+}
+
+function togglePlay() {
+  state.diff.playing = !state.diff.playing;
+  $("#diff-play").textContent = state.diff.playing ? "⏸ Pause" : "▶ Play";
+  if (state.diff.playing) {
+    syncPlayAll();
+  } else {
+    pauseAll();
+  }
+}
+
 function renderDifferenceCanvas() {
   const canvas = $("#diff-canvas");
-  const { sourceURL, targetURL } = state.previewFrames;
-  if (!sourceURL || !targetURL) return;
-  const srcImg = new Image();
-  const tgtImg = new Image();
-  let loaded = 0;
-  const onBoth = () => {
-    const w = Math.min(960, srcImg.naturalWidth || 640);
-    const h = Math.round(w * ((srcImg.naturalHeight || 360) / (srcImg.naturalWidth || 640)));
+  const baseEl = $("#diff-base");
+  const overlayEl = $("#diff-overlay");
+  if (!baseEl.src || !overlayEl.src) return;
+
+  function draw() {
+    const w = Math.min(960, baseEl.videoWidth || 640);
+    const h = Math.round(w * ((baseEl.videoHeight || 360) / (baseEl.videoWidth || 640)));
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
-    ctx.drawImage(srcImg, 0, 0, w, h);
+    ctx.drawImage(baseEl, 0, 0, w, h);
     const a = ctx.getImageData(0, 0, w, h);
-    ctx.drawImage(tgtImg, 0, 0, w, h);
+    ctx.drawImage(overlayEl, 0, 0, w, h);
     const b = ctx.getImageData(0, 0, w, h);
     const out = ctx.createImageData(w, h);
     for (let i = 0; i < a.data.length; i += 4) {
@@ -780,11 +829,15 @@ function renderDifferenceCanvas() {
       out.data[i + 3] = 255;
     }
     ctx.putImageData(out, 0, 0);
-  };
-  srcImg.onload = () => { if (++loaded === 2) onBoth(); };
-  tgtImg.onload = () => { if (++loaded === 2) onBoth(); };
-  srcImg.src = sourceURL;
-  tgtImg.src = targetURL;
+  }
+
+  // Wait for both videos to be ready before drawing.
+  let ready = 0;
+  const check = () => { if (++ready === 2) draw(); };
+  if (baseEl.readyState >= 2) check();
+  else baseEl.addEventListener("canplay", check, { once: true });
+  if (overlayEl.readyState >= 2) check();
+  else overlayEl.addEventListener("canplay", check, { once: true });
 }
 
 let lastLensX = 0;
@@ -798,8 +851,18 @@ function positionLens(x, y, rect) {
   lens.style.height = `${size}px`;
   lens.style.left = `${x - size / 2}px`;
   lens.style.top = `${y - size / 2}px`;
-  const activeURL = state.diff.magnifierShowsTarget ? state.previewFrames.targetURL : state.previewFrames.sourceURL;
-  lens.style.backgroundImage = activeURL ? `url(${activeURL})` : "none";
+  // For video elements, capture the current frame to a data URL.
+  const activeEl = state.diff.magnifierShowsTarget ? $("#diff-overlay") : $("#diff-base");
+  if (activeEl && activeEl.videoWidth) {
+    const fc = document.createElement("canvas");
+    fc.width = activeEl.videoWidth;
+    fc.height = activeEl.videoHeight;
+    fc.getContext("2d").drawImage(activeEl, 0, 0);
+    lens.style.backgroundImage = `url(${fc.toDataURL()})`;
+  } else {
+    const activeURL = state.diff.magnifierShowsTarget ? state.previewFrames.targetURL : state.previewFrames.sourceURL;
+    lens.style.backgroundImage = activeURL ? `url(${activeURL})` : "none";
+  }
   lens.style.backgroundSize = `${rect.width * zoom}px ${rect.height * zoom}px`;
   lens.style.backgroundPosition = `${-(x * zoom - size / 2)}px ${-(y * zoom - size / 2)}px`;
   lens.hidden = false;
@@ -1577,6 +1640,13 @@ $("#diff-swap").addEventListener("click", () => {
   applyDiffLayers();
 });
 
+$("#diff-play").addEventListener("click", togglePlay);
+$("#diff-sync").addEventListener("input", (e) => {
+  state.diff.syncOffset = Number(e.target.value) || 0;
+  $("#diff-sync-value").textContent = `${state.diff.syncOffset}ms`;
+  loadDiffFrames();
+});
+
 $("#diff-opacity").addEventListener("input", (e) => {
   state.diff.opacity = Number(e.target.value);
   $("#diff-opacity-value").textContent = `${state.diff.opacity}%`;
@@ -1664,6 +1734,7 @@ document.addEventListener("keydown", (e) => {
   if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
   if (e.key === "ArrowRight") { stepFrame(1); e.preventDefault(); }
   else if (e.key === "ArrowLeft") { stepFrame(-1); e.preventDefault(); }
+  else if (e.key === " ") { togglePlay(); e.preventDefault(); }
   else if (e.key.toLowerCase() === "s") { $("#diff-swap").click(); }
   else if (e.key.toLowerCase() === "f") { $("#diff-fullscreen").click(); }
 });
