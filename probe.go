@@ -74,7 +74,7 @@ func probe(ctx context.Context, ffprobeBin, path string) (*MediaInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, ffprobeBin,
+	cmd := execCMD(ctx, ffprobeBin,
 		"-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", path)
 	out, err := cmd.Output()
@@ -170,7 +170,7 @@ func probeRaw(ctx context.Context, ffprobeBin, path string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, ffprobeBin,
+	cmd := execCMD(ctx, ffprobeBin,
 		"-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", "-show_chapters", "-show_programs", path)
 	out, err := cmd.Output()

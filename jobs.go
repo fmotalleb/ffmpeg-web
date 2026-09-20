@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -708,7 +707,7 @@ func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) 
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, m.ffmpeg, args...)
+	cmd := execCMD(ctx, m.ffmpeg, args...)
 	cmd.Dir = m.workDir
 	m.appendLog(job, "ffmpeg "+strings.Join(args, " "))
 

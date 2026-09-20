@@ -61,7 +61,7 @@ func decodeTail(ctx context.Context, ffmpegBin, path string, duration float64) e
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, ffmpegBin, "-v", "error", "-nostdin",
+	cmd := execCMD(ctx, ffmpegBin, "-v", "error", "-nostdin",
 		"-ss", trimFloat(start), "-i", path, "-t", "5", "-f", "null", nullDevice)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -143,9 +143,9 @@ func (h *hookRunner) command(line string, summary map[string]any) {
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.CommandContext(ctx, "cmd", "/C", line)
+		cmd = execCMD(ctx, "cmd", "/C", line)
 	} else {
-		cmd = exec.CommandContext(ctx, "/bin/sh", "-c", line)
+		cmd = execCMD(ctx, "/bin/sh", "-c", line)
 	}
 	cmd.Dir = h.outDir
 	cmd.Env = append(os.Environ(),

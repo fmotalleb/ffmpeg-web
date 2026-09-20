@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -58,7 +57,7 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 	}
 	args = append(args, "-frames:v", "1", "-q:v", "2", "-f", "mjpeg", "pipe:1")
 
-	cmd := exec.CommandContext(ctx, ffmpegBin, args...)
+	cmd := execCMD(ctx, ffmpegBin, args...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
