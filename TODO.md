@@ -110,3 +110,8 @@
 
 - [ ] validate preset before saving
 - [ ] prevent arbitrary command execution through preset fields
+
+## Misc
+
+- [ ] background job count limiter (ffmpeg spawner for preview or worker)
+- [ ] add subtitle to video, and subtitle metadata
