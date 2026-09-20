@@ -2,3 +2,5 @@ ffmpeg-web
 *.mp4
 *.mkv
 encodes/
+__debug*
+*.exe
