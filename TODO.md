@@ -2,8 +2,12 @@
 
 ## DevEX
 
-- [ ] add go-releaser + Dockerfile + gh Actions
-- [ ] add golangci-lint v2 support
+- [x] add go-releaser + Dockerfile + gh Actions
+      `.goreleaser.yaml` builds Linux/macOS/Windows archives, `Dockerfile`
+      packages the server with ffmpeg, `.github/workflows/{ci,release}.yml`
+      run the checks and publish on `v*` tags
+- [x] add golangci-lint v2 support
+      `.golangci.yml`; run `golangci-lint run` and `golangci-lint fmt`
 
 ## Process Control
 

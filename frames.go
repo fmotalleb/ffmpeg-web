@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	frameTimeout  = 20 * time.Second
-	clipTimeout   = 30 * time.Second
+	frameTimeout   = 20 * time.Second
+	clipTimeout    = 30 * time.Second
 	defaultClipDur = 0.5
 )
 
@@ -22,14 +22,6 @@ const (
 // used for the untouched source, and for a finished job's actual output.
 func extractFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int) ([]byte, error) {
 	return runFrameExtract(ctx, ffmpegBin, path, atSeconds, width, "")
-}
-
-// extractPreviewFrame applies a spec's video filters (crop, scale, deinterlace,
-// rotate and so on) before grabbing the frame, so it shows what an encode
-// would look like without waiting for one. It does not reproduce whatever the
-// chosen codec's compression would do to the picture.
-func extractPreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, spec Spec) ([]byte, error) {
-	return runFrameExtract(ctx, ffmpegBin, path, atSeconds, width, filterChain(spec, path))
 }
 
 // previewEncodeFrames is how many frames the preview encoder produces.
@@ -212,7 +204,7 @@ func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duratio
 
 // encodePreviewClip encodes a short segment around atSeconds using the
 // full spec (codec, bitrate, quality, filters) into an MP4 clip.
-func encodePreviewClip(ctx context.Context, ffmpegBin, path string, atSeconds, duration float64, width int, spec Spec, workDir string) ([]byte, error) {
+func encodePreviewClip(ctx context.Context, ffmpegBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 

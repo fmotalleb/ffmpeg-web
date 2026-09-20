@@ -29,7 +29,7 @@ func verifyOutput(ctx context.Context, ffmpegBin, ffprobeBin, path string, expec
 
 	info, err := probe(ctx, ffprobeBin, path)
 	if err != nil {
-		return "", fmt.Errorf("the output file will not open: %s", err)
+		return "", fmt.Errorf("the output file will not open: %w", err)
 	}
 	if info.Video == nil || info.Video.Width == 0 {
 		return "", fmt.Errorf("the output file has no usable video track")
