@@ -1,0 +1,16 @@
+.git
+.github
+.vscode
+.agents
+encodes
+dist
+*.mp4
+*.mkv
+*.mov
+*.avi
+__debug*
+ffmpeg-web
+*.exe
+Dockerfile
+.dockerignore
+TODO.md

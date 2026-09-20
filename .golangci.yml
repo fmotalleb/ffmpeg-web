@@ -1,0 +1,65 @@
+# golangci-lint configuration (v2 schema).
+#
+# Run it with `golangci-lint run`; CI runs the same file. The formatters
+# (gofmt/goimports) are checked too, so `golangci-lint fmt` fixes what
+# `golangci-lint run` reports.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - prealloc
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - whitespace
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+    misspell:
+      locale: US
+      # The prose in this project uses British spellings in places, which is
+      # deliberate: these are not typos.
+      ignore-rules:
+        - cancelled
+        - honouring
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Tests may leave errors unchecked and repeat small helpers.
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gocritic
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/fmotalleb/ffmpeg-web

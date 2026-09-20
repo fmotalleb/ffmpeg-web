@@ -4,3 +4,5 @@ ffmpeg-web
 encodes/
 __debug*
 *.exe
+
+dist/

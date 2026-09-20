@@ -123,6 +123,7 @@ func (s *Store) Load() (Snapshot, error) {
 		backup := fmt.Sprintf("%s.broken-%d", s.path, time.Now().Unix())
 		_ = os.Rename(s.path, backup)
 		log.Printf("queue file was unreadable, moved it to %s", backup)
+		//nolint:nilerr // starting with an empty queue beats refusing to start
 		return Snapshot{Settings: defaultSettings()}, nil
 	}
 	if snap.Settings.ShrinkThreshold == 0 {

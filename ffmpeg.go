@@ -343,9 +343,12 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	}
 
 	// ---- audio ----
-	if pass == 1 {
+	switch {
+	// The first pass of a two-pass run only measures the video: it keeps
+	// no audio or subtitle track.
+	case pass == 1:
 		args = append(args, "-an", "-sn")
-	} else if audioOn {
+	case audioOn:
 		aenc := audioEncoders[s.Audio.Encoder]
 		if aenc == "" {
 			aenc = "aac"
@@ -365,7 +368,7 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 				args = append(args, "-af", af)
 			}
 		}
-	} else {
+	default:
 		args = append(args, "-an")
 	}
 

@@ -35,6 +35,20 @@ Then open http://127.0.0.1:8723.
 The web assets are embedded with `go:embed`, so the binary is all you need to
 deploy.
 
+## Container image
+
+```sh
+docker build -t ffmpeg-web .
+docker run --rm -p 8723:8723 -v "$PWD/videos:/media" ffmpeg-web
+```
+
+The image is Alpine with ffmpeg installed, and the server runs as uid 10001, so
+the folders you mount have to be writable by that user
+(`chown -R 10001 "$PWD/videos"`). It starts with
+`-addr=0.0.0.0:8723 -root=/media -out=/data/encoded`; append your own flags to
+`docker run` to change them, and mount `/data` if you want the encodes and the
+queue file to survive a restart.
+
 ## Layout
 
 | File | Contains |
@@ -191,6 +205,21 @@ rejected rather than silently overridden.
   current encode.
 - Burned-in subtitles re-read the source file inside the filter graph, so paths
   with `:` or `'` are escaped.
+
+## Development
+
+```sh
+go build ./...                 # compile
+go vet ./...                   # standard checks
+golangci-lint run              # lint, config in .golangci.yml
+golangci-lint fmt              # rewrite formatting and imports
+docker build -t ffmpeg-web .   # the same image CI builds
+```
+
+Every push and pull request runs the build, vet, lint and image build in
+`.github/workflows/ci.yml`. Pushing a `v*` tag runs GoReleaser
+(`.goreleaser.yaml`), which publishes binaries for Linux, macOS and Windows on
+the GitHub release and pushes the container image to GHCR.
 
 ## If you deploy it beyond localhost
 
