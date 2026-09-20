@@ -24,66 +24,68 @@
 
 - [ ] graceful job cancellation
 - [ ] force-kill job
-- [ ] preserve process/job state across application restart
-- [ ] show FFmpeg command and execution logs per job
+- [x] preserve process/job state across application restart
+- [x] show FFmpeg command and execution logs per job
 
 ## Frame Inspector
 
-- [ ] add per-job preview page
+- [x] add per-job preview page
 - [ ] select timestamp using:
-      - [ ] timeline
-      - [ ] timestamp input
-      - [ ] frame step forward/backward
+      - [x] timeline
+      - [ ] timestamp input (buggy, wont change the timeline)
+      - [x] frame step forward/backward
 
-- [ ] generate source and target frame
-- [ ] comparison modes:
-      - [ ] side-by-side
-      - [ ] draggable vertical split
-      - [ ] opacity overlay
-      - [ ] difference
-      - [ ] flicker / rapid source-target switching
+- [x] generate source and target frame
+- [x] comparison modes:
+      - [x] side-by-side
+      - [x] draggable vertical split
+      - [x] opacity overlay
+      - [x] difference
+      - [x] flicker / rapid source-target switching
 
-- [ ] draggable comparison divider
+- [x] draggable comparison divider
 
-- [ ] swap source/target display
+- [x] swap source/target display
 - [ ] keyboard shortcut for source/target swap
 - [ ] keyboard shortcut for next/previous frame
 
-- [ ] magnifier
-      - [ ] configurable zoom level (using scroll)
-      - [ ] click/drag magnifier
-      - [ ] source/target toggle inside magnifier using click
+- [x] magnifier
+      - [x] configurable zoom level (using scroll)
+      - [x] click/drag magnifier
+      - [x] source/target toggle inside magnifier using click
+      - [ ] display which one of source or target are being previewed right now
 
-- [ ] fullscreen preview
+- [x] fullscreen preview
 
-- [ ] download source frame
-- [ ] download target frame
-- [ ] download diff image
+- [x] download source frame
+- [x] download target frame
+- [x] download diff image
 
-- [ ] generate preview thumbnails for source/target
-- [ ] by default get the count and scale of the frames from user, 
-- [ ] thumbnail timeline
-- [ ] cache generated frames
+- [x] generate preview thumbnails for source/target
+- [x] by default get the count and scale of the frames from user,
+- [x] thumbnail timeline
+- [x] cache generated frames
 
 ## Job Queue
 
 - [ ] per-job preview
 - [ ] per-job configuration
-- [ ] edit queued job
+- [x] edit queued job
 - [ ] duplicate job
 - [ ] retry failed job
-- [ ] cancel job
-- [ ] delete job
+- [x] cancel job
+- [x] delete job
 - [ ] reorder queued jobs
-- [ ] show progress
-- [ ] show ETA
-- [ ] show encoding speed
-- [ ] show output size
-- [ ] show FFmpeg command
+- [x] show progress
+- [x] show ETA
+- [x] show encoding speed
+- [ ] show approximate output size
+- [x] show FFmpeg command
 
 - [ ] prevent editing jobs that are already running
 - [ ] optionally allow "duplicate and edit" for running/completed jobs
 
+- [ ] refactor job queue display
 
 ## Configuration
 
@@ -92,7 +94,6 @@
 - [ ] document all environment variables
 - [ ] validate configuration at startup
 - [ ] expose effective non-secret configuration in UI/API
-
 
 ## Presets
 
