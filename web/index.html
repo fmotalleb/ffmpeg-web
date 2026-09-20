@@ -438,6 +438,15 @@
           <button class="btn btn-small btn-quiet" id="preview-jump-mid">Middle</button>
           <button class="btn btn-small btn-quiet" id="preview-jump-end">Trim end</button>
           <span class="spacer"></span>
+          <label class="field">
+            <span>Duration</span>
+            <select id="preview-dur">
+              <option value="0.25">0.25s</option>
+              <option value="0.5" selected>0.5s</option>
+              <option value="1">1s</option>
+              <option value="2">2s</option>
+            </select>
+          </label>
           <button class="btn btn-small" id="preview-refresh">Refresh frames</button>
         </div>
 
@@ -466,14 +475,14 @@
 
         <div class="diff-stage" id="diff-stage">
           <p id="diff-empty" class="diff-empty">Pick a source, then move the timeline to load a frame from the source and the target.</p>
-          <img id="diff-base" class="diff-img" alt="" hidden />
-          <img id="diff-overlay" class="diff-img" alt="" hidden />
+          <video id="diff-base" class="diff-img" muted playsinline loop hidden></video>
+          <video id="diff-overlay" class="diff-img" muted playsinline loop hidden></video>
           <div id="diff-handle" class="diff-handle" hidden><span></span></div>
           <div id="diff-lens" class="diff-lens" hidden></div>
         </div>
         <div class="diff-sbs" id="diff-sbs" hidden>
-          <figure><img id="sbs-source" alt="Source frame" /><figcaption>Source</figcaption></figure>
-          <figure><img id="sbs-target" alt="Target frame" /><figcaption>Target</figcaption></figure>
+          <figure><video id="sbs-source" muted playsinline loop></video><figcaption>Source</figcaption></figure>
+          <figure><video id="sbs-target" muted playsinline loop></video><figcaption>Target</figcaption></figure>
         </div>
         <canvas id="diff-canvas" class="diff-canvas" hidden></canvas>
         <p id="diff-note" class="note"></p>
