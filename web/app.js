@@ -16,6 +16,7 @@ const state = {
   editingJobId: null,
   previewJobId: null,
   previewFrames: { time: 0, sourceURL: null, targetURL: null, targetIsFinal: false },
+  previewDur: 0.5,
   diff: {
     overlayIsTarget: true, magnifier: false, magnifierShowsTarget: true,
     dividerPct: 50, mode: "split", opacity: 50, magZoom: 3,
@@ -429,30 +430,33 @@ function currentPreviewSubject() {
   if (state.previewJobId) {
     const job = state.jobs.get(state.previewJobId);
     if (job) {
+      const dur = state.previewDur;
       return {
         label: job.label || baseName(job.output),
         duration: job.duration || 0,
         fps: job.fps || 0,
         targetIsFinal: job.status === "done",
-        sourceFrame: (t, w) => frameURL(
-          `/api/jobs/${job.id}/frame?which=source&time=${t}${w ? "&width=" + w : ""}`),
-        targetFrame: (t, w) => job.status === "done"
-          ? frameURL(`/api/jobs/${job.id}/frame?which=output&time=${t}${w ? "&width=" + w : ""}`)
-          : frameURL(`/api/jobs/${job.id}/preview-frame?time=${t}${w ? "&width=" + w : ""}`),
+        sourceClip: (t, w) => clipURL(
+          `/api/jobs/${job.id}/clip?which=source&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`),
+        targetClip: (t, w) => job.status === "done"
+          ? clipURL(`/api/jobs/${job.id}/clip?which=output&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`)
+          : clipURLPost("/api/preview/clip",
+            { input: job.source, time: t, duration: dur, width: w || 0, spec: job.spec }),
       };
     }
     state.previewJobId = null;
   }
   if (state.source) {
+    const dur = state.previewDur;
     return {
       label: state.source.name,
       duration: state.source.duration || 0,
       fps: state.source.video ? state.source.video.fps : 0,
       targetIsFinal: false,
-      sourceFrame: (t, w) => frameURL(
-        `/api/frame?path=${encodeURIComponent(state.source.path)}&time=${t}${w ? "&width=" + w : ""}`),
-      targetFrame: (t, w) => frameURLPost("/api/preview/frame",
-        { input: state.source.path, time: t, width: w || 0, spec: state.settings }),
+      sourceClip: (t, w) => clipURL(
+        `/api/clip?path=${encodeURIComponent(state.source.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`),
+      targetClip: (t, w) => clipURLPost("/api/preview/clip",
+        { input: state.source.path, time: t, duration: dur, width: w || 0, spec: state.settings }),
     };
   }
   return null;
@@ -469,6 +473,31 @@ async function frameURL(url) {
 }
 
 async function frameURLPost(url, body) {
+  const key = url + "|" + JSON.stringify(body);
+  const cached = cacheGet(key);
+  if (cached) return cached;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await readErrorText(res));
+  const objURL = URL.createObjectURL(await res.blob());
+  cacheSet(key, objURL);
+  return objURL;
+}
+
+async function clipURL(url) {
+  const cached = cacheGet(url);
+  if (cached) return cached;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await readErrorText(res));
+  const objURL = URL.createObjectURL(await res.blob());
+  cacheSet(url, objURL);
+  return objURL;
+}
+
+async function clipURLPost(url, body) {
   const key = url + "|" + JSON.stringify(body);
   const cached = cacheGet(key);
   if (cached) return cached;
@@ -614,12 +643,12 @@ async function loadDiffFrames() {
   const stage = $("#diff-stage");
   const width = Math.min(1280, Math.round(stage.clientWidth) || 960) || 960;
   try {
-    const [sourceURL, targetURL] = await Promise.all([subject.sourceFrame(t, width), subject.targetFrame(t, width)]);
+    const [sourceURL, targetURL] = await Promise.all([subject.sourceClip(t, width), subject.targetClip(t, width)]);
     state.previewFrames = { time: t, sourceURL, targetURL, targetIsFinal: subject.targetIsFinal };
     updateDiffDisplay();
     $("#diff-note").textContent = subject.targetIsFinal
-      ? "The target frame is from the actual encoded file."
-      : "The target frame is a live preview of the current settings — actual compression will look slightly softer.";
+      ? "The target clip is from the actual encoded file."
+      : "The target clip is a live preview of the current settings — actual compression will look slightly softer.";
   } catch (err) {
     toast(err.message);
   }
@@ -646,13 +675,21 @@ function updateDiffDisplay() {
 
 function applyDiffLayers() {
   const overlayIsTarget = state.diff.overlayIsTarget;
-  $("#diff-base").src = overlayIsTarget ? state.previewFrames.sourceURL || "" : state.previewFrames.targetURL || "";
-  $("#diff-overlay").src = overlayIsTarget ? state.previewFrames.targetURL || "" : state.previewFrames.sourceURL || "";
+  const baseEl = $("#diff-base");
+  const overlayEl = $("#diff-overlay");
+  const sbsSrc = $("#sbs-source");
+  const sbsTgt = $("#sbs-target");
+  const srcURL = overlayIsTarget ? state.previewFrames.sourceURL || "" : state.previewFrames.targetURL || "";
+  const tgtURL = overlayIsTarget ? state.previewFrames.targetURL || "" : state.previewFrames.sourceURL || "";
+  baseEl.src = srcURL;
+  overlayEl.src = tgtURL;
+  sbsSrc.src = state.previewFrames.sourceURL || "";
+  sbsTgt.src = state.previewFrames.targetURL || "";
+  // Play all videos in sync.
+  [baseEl, overlayEl, sbsSrc, sbsTgt].forEach((v) => { v.currentTime = 0; v.play().catch(() => {}); });
   $("#diff-overlay-label").textContent = overlayIsTarget
     ? "Overlay: target — drag left to reveal the source"
     : "Overlay: source — drag left to reveal the target";
-  $("#sbs-source").src = state.previewFrames.sourceURL || "";
-  $("#sbs-target").src = state.previewFrames.targetURL || "";
 }
 
 // Shows/hides the right elements for the chosen comparison mode and does any
@@ -1503,6 +1540,10 @@ $("#preview-time-input").addEventListener("blur", (e) => {
 $("#preview-step-back").addEventListener("click", () => stepFrame(-1));
 $("#preview-step-fwd").addEventListener("click", () => stepFrame(1));
 $("#preview-refresh").addEventListener("click", loadDiffFrames);
+$("#preview-dur").addEventListener("change", (e) => {
+  state.previewDur = Number(e.target.value) || 0.5;
+  loadDiffFrames();
+});
 $("#preview-jump-start").addEventListener("click", () => {
   setPreviewTime(state.settings.trim.start || 0);
   loadDiffFrames();
