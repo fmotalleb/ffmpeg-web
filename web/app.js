@@ -444,6 +444,13 @@ function currentPreviewSubject() {
           ? clipURL(`/api/jobs/${job.id}/clip?which=output&time=${t + off}&duration=${dur}${w ? "&width=" + w : ""}`)
           : clipURLPost("/api/preview/clip",
             { input: job.source, time: t + off, duration: dur, width: w || 0, spec: job.spec }),
+        // Single-frame endpoints for screenshots.
+        sourceFrame: (t, w) => frameURL(
+          `/api/jobs/${job.id}/frame?which=source&time=${t}${w ? "&width=" + w : ""}`),
+        targetFrame: (t, w) => job.status === "done"
+          ? frameURL(`/api/jobs/${job.id}/frame?which=output&time=${t}${w ? "&width=" + w : ""}`)
+          : frameURLPost("/api/preview/frame",
+            { input: job.source, time: t, width: w || 0, spec: job.spec }),
       };
     }
     state.previewJobId = null;
@@ -459,6 +466,11 @@ function currentPreviewSubject() {
         `/api/clip?path=${encodeURIComponent(state.source.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`),
       targetClip: (t, w) => clipURLPost("/api/preview/clip",
         { input: state.source.path, time: t + off, duration: dur, width: w || 0, spec: state.settings }),
+      // Single-frame endpoints for screenshots.
+      sourceFrame: (t, w) => frameURL(
+        `/api/frame?path=${encodeURIComponent(state.source.path)}&time=${t}${w ? "&width=" + w : ""}`),
+      targetFrame: (t, w) => frameURLPost("/api/preview/frame",
+        { input: state.source.path, time: t, width: w || 0, spec: state.settings }),
     };
   }
   return null;
@@ -814,6 +826,7 @@ function renderDifferenceCanvas() {
   function draw() {
     const w = Math.min(960, baseEl.videoWidth || 640);
     const h = Math.round(w * ((baseEl.videoHeight || 360) / (baseEl.videoWidth || 640)));
+    if (w === 0 || h === 0) return;
     canvas.width = w;
     canvas.height = h;
     const ctx = canvas.getContext("2d");
@@ -831,13 +844,18 @@ function renderDifferenceCanvas() {
     ctx.putImageData(out, 0, 0);
   }
 
-  // Wait for both videos to be ready before drawing.
-  let ready = 0;
-  const check = () => { if (++ready === 2) draw(); };
-  if (baseEl.readyState >= 2) check();
-  else baseEl.addEventListener("canplay", check, { once: true });
-  if (overlayEl.readyState >= 2) check();
-  else overlayEl.addEventListener("canplay", check, { once: true });
+  // Both videos must have decoded frames (readyState >= 2 = HAVE_CURRENT_DATA).
+  // If not ready, poll briefly — the files are tiny clips so they load fast.
+  let attempts = 0;
+  function tryDraw() {
+    if (baseEl.readyState >= 2 && overlayEl.readyState >= 2) {
+      draw();
+      return;
+    }
+    if (++attempts > 30) return; // give up after ~1.5s
+    setTimeout(tryDraw, 50);
+  }
+  tryDraw();
 }
 
 let lastLensX = 0;
@@ -882,68 +900,130 @@ function frameFileStamp(t) {
   return formatPreciseTime(t).replace(":", "m").replace(".", "s");
 }
 
-/* ---------- screenshots ---------- */
+/* ---------- screenshots (contact sheet) ---------- */
+
+let contactSheetBlob = null;
+let thumbSourceMode = "source";
 
 async function generateThumbnails() {
   const subject = currentPreviewSubject();
   if (!subject) { toast("Pick a source first"); return; }
   const meta = await ensureSubjectMeta(subject);
-  if (!meta.duration) { toast("This file's length isn't known yet — try again once it starts."); return; }
+  if (!meta.duration) { toast("This file's length isn't known yet."); return; }
 
-  const count = clampNum(Math.round(Number($("#thumb-count").value)) || 8, 2, 24);
-  const scale = clampNum(Math.round(Number($("#thumb-scale").value)) || 160, 60, 640);
-  const times = Array.from({ length: count }, (_, i) => (meta.duration * (i + 0.5)) / count);
-  const srcRow = $("#thumb-source-strip");
-  const tgtRow = $("#thumb-target-strip");
-  const timeline = $("#thumb-timeline");
-  srcRow.innerHTML = "";
-  tgtRow.innerHTML = "";
-  timeline.innerHTML = "";
+  const frameFn = thumbSourceMode === "target" ? subject.targetFrame : subject.sourceFrame;
+  if (!frameFn) { toast("No frames available for this source."); return; }
+
+  const count = clampNum(Math.round(Number($("#thumb-count").value)) || 16, 2, 36);
+  const cols = clampNum(Math.round(Number($("#thumb-cols").value)) || 4, 2, 8);
+  const thumbW = clampNum(Math.round(Number($("#thumb-scale").value)) || 320, 80, 640);
+  const rows = Math.ceil(count / cols);
+  const gap = 4;
+  const labelH = 20;
+  const headerH = 60;
 
   const btn = $("#thumb-generate");
   btn.disabled = true;
   btn.textContent = "Generating…";
+  contactSheetBlob = null;
+  $("#thumb-download").hidden = true;
+  $("#thumb-output").innerHTML = "";
+
   try {
-    const results = await Promise.all(times.map(async (t) => {
-      const [srcURL, tgtURL] = await Promise.all([
-        subject.sourceFrame(t, scale).catch(() => null),
-        subject.targetFrame(t, scale).catch(() => null),
-      ]);
-      return { t, srcURL, tgtURL };
+    // 1. Fetch all frames.
+    const times = Array.from({ length: count }, (_, i) => (meta.duration * (i + 0.5)) / count);
+    const frames = await Promise.all(times.map(async (t) => {
+      try {
+        const url = await frameFn(t, thumbW);
+        const img = await loadImage(url);
+        return { t, img };
+      } catch { return null; }
     }));
-    results.forEach(({ t, srcURL, tgtURL }) => {
-      if (srcURL) {
-        srcRow.append(thumbButton(srcURL, t));
-        timeline.append(timelineTick(srcURL, t));
+
+    // 2. Compose into a single contact-sheet canvas.
+    const thumbH = Math.round(thumbW * 9 / 16);
+    const canvasW = cols * (thumbW + gap) + gap;
+    const canvasH = headerH + rows * (thumbH + labelH + gap) + gap;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, canvasW, canvasH);
+
+    // 3. Draw metadata header.
+    const s = state.settings;
+    const dims = outputDimensions();
+    const encName = { x264: "H.264", x265: "H.265", vp9: "VP9", av1: "AV1", copy: "copy" }[s.video.encoder] || s.video.encoder;
+    const qualityInfo = s.video.rateMode === "bitrate"
+      ? `${s.video.bitrate} kbit/s` : `CRF ${s.video.quality}`;
+    const resolution = dims ? `${dims.w}×${dims.h}` : "—";
+    const lines = [
+      state.source ? baseName(state.source.path) : "",
+      `Preset: ${presetName()}  ·  Encoder: ${encName} (${s.video.speed})  ·  ${qualityInfo}  ·  ${resolution}`,
+    ];
+    ctx.fillStyle = "#ccc";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText(lines[0], gap + 4, gap + 16);
+    ctx.font = "11px sans-serif";
+    ctx.fillStyle = "#999";
+    ctx.fillText(lines[1], gap + 4, gap + 34);
+    ctx.fillStyle = thumbSourceMode === "target" ? "#e0a556" : "#666";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(thumbSourceMode === "target" ? "TARGET" : "SOURCE", canvasW - gap - 40, gap + 16);
+
+    // 4. Draw thumbnails.
+    frames.forEach((frame, i) => {
+      if (!frame || !frame.img) return;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = gap + col * (thumbW + gap);
+      const y = headerH + gap + row * (thumbH + labelH + gap);
+      const srcAspect = frame.img.naturalWidth / frame.img.naturalHeight;
+      const dstAspect = thumbW / thumbH;
+      let sx, sy, sw, sh;
+      if (srcAspect > dstAspect) {
+        sh = frame.img.naturalHeight;
+        sw = sh * dstAspect;
+        sx = (frame.img.naturalWidth - sw) / 2;
+        sy = 0;
+      } else {
+        sw = frame.img.naturalWidth;
+        sh = sw / dstAspect;
+        sx = 0;
+        sy = (frame.img.naturalHeight - sh) / 2;
       }
-      if (tgtURL) tgtRow.append(thumbButton(tgtURL, t));
+      ctx.drawImage(frame.img, sx, sy, sw, sh, x, y, thumbW, thumbH);
+      ctx.fillStyle = "#fff";
+      ctx.font = "12px monospace";
+      ctx.fillText(formatDuration(frame.t), x + 4, y + thumbH + 14);
     });
+
+    // 5. Show the result and offer download.
+    canvas.toBlob((blob) => {
+      contactSheetBlob = blob;
+      const objURL = URL.createObjectURL(blob);
+      const img = document.createElement("img");
+      img.src = objURL;
+      img.style.maxWidth = "100%";
+      img.style.borderRadius = "6px";
+      $("#thumb-output").innerHTML = "";
+      $("#thumb-output").append(img);
+      $("#thumb-download").hidden = false;
+    }, "image/png");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Generate screenshots";
+    btn.textContent = "Generate";
   }
 }
 
-function thumbButton(url, t) {
-  const btn = document.createElement("button");
-  btn.className = "thumb";
-  const img = document.createElement("img");
-  img.src = url;
-  img.alt = "";
-  const time = document.createElement("time");
-  time.textContent = formatDuration(t);
-  btn.append(img, time);
-  btn.addEventListener("click", () => { setPreviewTime(t); loadDiffFrames(); });
-  return btn;
-}
-
-function timelineTick(url, t) {
-  const btn = document.createElement("button");
-  btn.className = "thumb-tick";
-  btn.style.backgroundImage = `url(${url})`;
-  btn.title = formatDuration(t);
-  btn.addEventListener("click", () => { setPreviewTime(t); loadDiffFrames(); });
-  return btn;
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("failed to load frame"));
+    img.src = url;
+  });
 }
 
 /* ---------- probe viewer ---------- */
@@ -1329,6 +1409,13 @@ function jobRow(job) {
   const fill = document.createElement("i");
   fill.style.width = `${Math.round((job.progress || 0) * 100)}%`;
   bar.append(fill);
+  // Show estimated final size on the progress bar.
+  if (job.status === "running" && job.estimatedSize > 0) {
+    const sizeLabel = document.createElement("span");
+    sizeLabel.className = "job-bar-label";
+    sizeLabel.textContent = `≈ ${formatBytes(job.estimatedSize)}`;
+    bar.append(sizeLabel);
+  }
 
   row.append(title, meta, actions, bar);
 
@@ -1515,6 +1602,10 @@ function render() {
 }
 
 /* ---------- wiring ---------- */
+
+$("#rail-close").addEventListener("click", () => {
+  $("#rail").classList.toggle("collapsed");
+});
 
 $("#btn-browse").addEventListener("click", openBrowser);
 $("#btn-folder").addEventListener("click", openBrowser);
@@ -1735,11 +1826,29 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") { stepFrame(1); e.preventDefault(); }
   else if (e.key === "ArrowLeft") { stepFrame(-1); e.preventDefault(); }
   else if (e.key === " ") { togglePlay(); e.preventDefault(); }
+  else if (e.key === "[") { nudgeSync(-33); e.preventDefault(); }
+  else if (e.key === "]") { nudgeSync(33); e.preventDefault(); }
   else if (e.key.toLowerCase() === "s") { $("#diff-swap").click(); }
   else if (e.key.toLowerCase() === "f") { $("#diff-fullscreen").click(); }
 });
 
 $("#thumb-generate").addEventListener("click", generateThumbnails);
+$$("#thumb-source .seg").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    thumbSourceMode = btn.dataset.src;
+    $$("#thumb-source .seg").forEach((b) =>
+      b.classList.toggle("is-active", b.dataset.src === thumbSourceMode));
+  });
+});
+$("#thumb-download").addEventListener("click", () => {
+  if (!contactSheetBlob) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(contactSheetBlob);
+  a.download = "contact-sheet.png";
+  document.body.append(a);
+  a.click();
+  a.remove();
+});
 
 bindInputs();
 render();

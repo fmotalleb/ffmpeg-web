@@ -34,8 +34,11 @@
 
 <main class="shell">
 
-  <aside class="rail" aria-label="Presets">
-    <h2 class="rail-title">Presets</h2>
+  <aside class="rail" id="rail" aria-label="Presets">
+    <div class="rail-header">
+      <h2 class="rail-title">Presets</h2>
+      <button class="btn btn-small btn-quiet" id="rail-close" title="Close presets">✕</button>
+    </div>
     <div id="preset-list" class="preset-list"></div>
   </aside>
 
@@ -497,27 +500,28 @@
           <button class="btn btn-small btn-quiet" id="dl-diff" hidden>Download difference</button>
         </div>
 
-        <h3 class="group-title">Screenshots</h3>
+        <h3 class="group-title">Contact Sheet</h3>
         <div class="thumb-toolbar">
+          <div class="segmented" id="thumb-source" role="group" aria-label="Frame source">
+            <button class="seg is-active" data-src="source">Source</button>
+            <button class="seg" data-src="target">Target</button>
+          </div>
           <label class="field">
             <span>How many</span>
-            <input type="number" id="thumb-count" min="2" max="24" value="8" />
+            <input type="number" id="thumb-count" min="2" max="36" value="16" />
+          </label>
+          <label class="field">
+            <span>Columns</span>
+            <input type="number" id="thumb-cols" min="2" max="8" value="4" />
           </label>
           <label class="field">
             <span>Size (px)</span>
-            <input type="number" id="thumb-scale" min="80" max="480" step="20" value="160" />
+            <input type="number" id="thumb-scale" min="80" max="640" step="20" value="320" />
           </label>
-          <button class="btn btn-small" id="thumb-generate">Generate screenshots</button>
+          <button class="btn btn-small" id="thumb-generate">Generate</button>
+          <button class="btn btn-small btn-quiet" id="thumb-download" hidden>Download</button>
         </div>
-        <div class="thumb-timeline" id="thumb-timeline"></div>
-        <div class="thumb-row">
-          <p class="thumb-row-label">Source</p>
-          <div class="thumb-strip" id="thumb-source-strip"></div>
-        </div>
-        <div class="thumb-row">
-          <p class="thumb-row-label">Target</p>
-          <div class="thumb-strip" id="thumb-target-strip"></div>
-        </div>
+        <div id="thumb-output"></div>
       </section>
     </div>
   </section>

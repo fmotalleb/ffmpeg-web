@@ -25,6 +25,9 @@ import (
 //go:embed web
 var webAssets embed.FS
 
+// version is stamped in at build time by GoReleaser and the Dockerfile.
+var version = "dev"
+
 var nullDevice = os.DevNull
 
 var videoExt = map[string]bool{
@@ -106,6 +109,7 @@ func main() {
 	}
 
 	go func() {
+		log.Printf("transcoder %s", version)
 		log.Printf("sources   %s", mediaRoot)
 		log.Printf("encodes   %s", outDir)
 		log.Printf("queue     %s (%d jobs)", queuePath, len(snap.Jobs))
@@ -328,7 +332,8 @@ func (s *server) scanDir(dir string, recursive bool) ([]scanned, error) {
 	var found []scanned
 	walk := func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // unreadable corners should not abort the whole scan
+			//nolint:nilerr // an unreadable corner should not abort the whole scan
+			return nil
 		}
 		name := d.Name()
 		if d.IsDir() {
@@ -342,10 +347,12 @@ func (s *server) scanDir(dir string, recursive bool) ([]scanned, error) {
 		}
 		info, err := d.Info()
 		if err != nil {
+			//nolint:nilerr // a file that vanished mid-scan is simply skipped
 			return nil
 		}
 		rel, err := filepath.Rel(dir, path)
 		if err != nil {
+			//nolint:nilerr // a file outside the walked tree is simply skipped
 			return nil
 		}
 		found = append(found, scanned{Path: path, Rel: filepath.ToSlash(rel), Size: info.Size()})
@@ -528,7 +535,7 @@ func parseTimeDur(r *http.Request) (float64, float64) {
 	dur := defaultClipDur
 	if v := r.URL.Query().Get("duration"); v != "" {
 		if parsed, err := strconv.ParseFloat(v, 64); err == nil && parsed > 0 {
-		dur = parsed
+			dur = parsed
 		}
 	}
 	return t, dur
@@ -560,7 +567,6 @@ func (s *server) handlePreviewClip(w http.ResponseWriter, r *http.Request) {
 		Input    string  `json:"input"`
 		Time     float64 `json:"time"`
 		Duration float64 `json:"duration"`
-		Width    int     `json:"width"`
 		Spec     Spec    `json:"spec"`
 	}
 	if err := decodeBody(r, &body); err != nil {
@@ -576,7 +582,7 @@ func (s *server) handlePreviewClip(w http.ResponseWriter, r *http.Request) {
 	if dur <= 0 {
 		dur = defaultClipDur
 	}
-	data, err := encodePreviewClip(r.Context(), s.ffmpeg, path, body.Time, dur, body.Width, body.Spec, s.workDir)
+	data, err := encodePreviewClip(r.Context(), s.ffmpeg, path, body.Time, dur, body.Spec, s.workDir)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
