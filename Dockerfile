@@ -24,13 +24,23 @@ RUN CGO_ENABLED=0 go build -trimpath \
         -ldflags "-s -w -X main.version=${VERSION}" \
         -o /out/transcoder .
 
-FROM alpine:3.22
 
-RUN apk add --no-cache ffmpeg ca-certificates \
- # The server writes its queue and logs as an unprivileged user.
- && adduser -D -u 10001 -h /data transcoder \
- && mkdir -p /media /data/encoded \
- && chown -R transcoder:transcoder /media /data
+FROM ubuntu:26.04
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        ca-certificates \
+        wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd \
+        --uid 10001 \
+        --create-home \
+        --home-dir /data \
+        --shell /usr/sbin/nologin \
+        transcoder \
+    && mkdir -p /media /data/encoded \
+    && chown -R transcoder:transcoder /media /data
 
 COPY --from=build /out/transcoder /usr/local/bin/transcoder
 
