@@ -171,19 +171,26 @@ func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duratio
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 
+	tmp, err := os.CreateTemp("", "clip-*.mp4")
+	if err != nil {
+		return nil, fmt.Errorf("cannot create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	defer os.Remove(tmpPath)
+
 	args := []string{"-hide_banner", "-nostdin", "-y", "-loglevel", "error",
 		"-ss", trimFloat(atSeconds), "-t", trimFloat(duration), "-i", path,
 		"-map", "0:v:0?",
 		"-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-		"-an", "-f", "mp4"}
+		"-an"}
 	if width > 0 {
 		args = append(args, "-vf", fmt.Sprintf("scale=%d:-2:flags=lanczos", width))
 	}
-	args = append(args, "pipe:1")
+	args = append(args, tmpPath)
 
 	cmd := execCMD(ctx, ffmpegBin, args...)
-	var out, stderr bytes.Buffer
-	cmd.Stdout = &out
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(stderr.String())
@@ -192,10 +199,15 @@ func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duratio
 		}
 		return nil, fmt.Errorf("could not extract clip: %s", firstLine(msg))
 	}
-	if out.Len() == 0 {
+
+	data, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot read clip: %w", err)
+	}
+	if len(data) == 0 {
 		return nil, fmt.Errorf("no clip data at that time")
 	}
-	return out.Bytes(), nil
+	return data, nil
 }
 
 // encodePreviewClip encodes a short segment around atSeconds using the

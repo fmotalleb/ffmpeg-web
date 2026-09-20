@@ -615,6 +615,18 @@ code {
 #diff-base { z-index: 1; }
 #diff-overlay { z-index: 2; }
 
+.original-label {
+  position: absolute;
+  bottom: 8px;
+  padding: 2px 8px;
+  background: rgba(0,0,0,0.6);
+  color: #ccc;
+  font-size: 12px;
+  border-radius: 3px;
+  z-index: 4;
+  pointer-events: none;
+}
+
 .diff-handle {
   position: absolute;
   top: 0;
@@ -751,12 +763,12 @@ code {
 }
 
 .diff-canvas {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #05070a;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  display: block;
+  height: 100%;
+  object-fit: contain;
+  z-index: 5;
 }
 
 .diff-downloads {

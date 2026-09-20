@@ -459,7 +459,11 @@
             <button class="seg" data-mode="flicker">Flicker</button>
           </div>
           <button class="btn btn-small" id="diff-swap" title="Swap source/target (S)">Swap</button>
-          <span id="diff-overlay-label" class="queue-summary"></span>
+          <button class="btn btn-small" id="diff-play" title="Play / Pause (Space)">▶ Play</button>
+          <label class="field" id="diff-sync-field">
+            <span>Sync offset <em id="diff-sync-value" class="hint">0ms</em></span>
+            <input type="range" id="diff-sync" min="-500" max="500" value="0" step="10" />
+          </label>
           <span class="spacer"></span>
           <label class="field check" id="diff-magnifier-field">
             <input type="checkbox" id="diff-magnifier" />
@@ -475,21 +479,22 @@
 
         <div class="diff-stage" id="diff-stage">
           <p id="diff-empty" class="diff-empty">Pick a source, then move the timeline to load a frame from the source and the target.</p>
+          <span id="diff-original-label" class="original-label" hidden></span>
           <video id="diff-base" class="diff-img" muted playsinline loop hidden></video>
           <video id="diff-overlay" class="diff-img" muted playsinline loop hidden></video>
           <div id="diff-handle" class="diff-handle" hidden><span></span></div>
           <div id="diff-lens" class="diff-lens" hidden></div>
+          <canvas id="diff-canvas" class="diff-canvas"></canvas>
         </div>
         <div class="diff-sbs" id="diff-sbs" hidden>
           <figure><video id="sbs-source" muted playsinline loop></video><figcaption>Source</figcaption></figure>
           <figure><video id="sbs-target" muted playsinline loop></video><figcaption>Target</figcaption></figure>
         </div>
-        <canvas id="diff-canvas" class="diff-canvas" hidden></canvas>
         <p id="diff-note" class="note"></p>
         <div class="diff-downloads">
-          <button class="btn btn-small btn-quiet" id="dl-source">Download source frame</button>
-          <button class="btn btn-small btn-quiet" id="dl-target">Download target frame</button>
-          <button class="btn btn-small btn-quiet" id="dl-diff" hidden>Download difference image</button>
+          <button class="btn btn-small btn-quiet" id="dl-source">Download source</button>
+          <button class="btn btn-small btn-quiet" id="dl-target">Download target</button>
+          <button class="btn btn-small btn-quiet" id="dl-diff" hidden>Download difference</button>
         </div>
 
         <h3 class="group-title">Screenshots</h3>
