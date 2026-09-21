@@ -1,6 +1,7 @@
 import { useStore } from "../store";
 import { api, toast } from "../api";
 import { JobRow } from "./JobRow";
+import { Icon } from "./icons";
 import { formatDuration } from "../utils";
 
 export function Queue() {
@@ -18,92 +19,116 @@ export function Queue() {
     .filter((j) => j.status === "queued" || j.status === "running")
     .reduce((acc, j) => acc + (j.eta > 0 ? j.eta : 0), 0);
 
-  const summary = jobsArray.length
-    ? `${count("running")} encoding \u00b7 ${waiting} waiting \u00b7 ${count("done")} done` +
-      `${count("failed") ? ` \u00b7 ${count("failed")} failed` : ""}` +
-      `${remaining > 0 ? ` \u00b7 about ${formatDuration(remaining)} left on the current file` : ""}` +
-      `${queue.paused ? " \u00b7 paused" : ""}`
-    : queue.paused
-      ? "paused"
+  const stats = (
+    <>
+      {count("running") > 0 && (
+        <span className="qstat running">{count("running")} encoding</span>
+      )}
+      {waiting > 0 && <span className="qstat waiting">{waiting} waiting</span>}
+      {count("done") > 0 && <span className="qstat done">{count("done")} done</span>}
+      {count("failed") > 0 && (
+        <span className="qstat failed">{count("failed")} failed</span>
+      )}
+      {count("canceled") > 0 && (
+        <span className="qstat canceled">{count("canceled")} canceled</span>
+      )}
+    </>
+  );
+
+  const note = queue.paused
+    ? "queue is paused"
+    : remaining > 0
+      ? `about ${formatDuration(remaining)} left`
       : "";
 
   return (
     <section className="queue" aria-label="Queue">
       <header className="queue-head">
         <h2>Queue</h2>
-        <span className="queue-summary">{summary}</span>
-        <button
-          className={`btn btn-small${queue.paused ? " btn-primary" : ""}`}
-          onClick={() => {
-            api("/api/queue/pause", {
-              method: "POST",
-              body: JSON.stringify({ paused: !queue.paused }),
-            })
-              .then(() => setQueuePaused(!queue.paused))
-              .catch((err) => toast(err.message));
-          }}
-        >
-          {queue.paused ? "Resume" : "Pause"}
-        </button>
-        <button
-          className="btn btn-small btn-quiet"
-          onClick={() => setQueueSettingsOpen(!queueSettingsOpen)}
-        >
-          Options
-        </button>
-        <button
-          className="btn btn-small btn-quiet"
-          onClick={() => {
-            window.location.href = "/api/queue/export";
-          }}
-        >
-          Export
-        </button>
-        <button
-          className="btn btn-small btn-quiet"
-          onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = "application/json,.json";
-            input.onchange = async (e) => {
-              const file = (e.target as HTMLInputElement).files?.[0];
-              if (!file) return;
-              try {
-                const result = await api<{ added: number; rejected: string[] }>(
-                  "/api/queue/import",
-                  { method: "POST", body: await file.text() },
-                );
-                toast(
-                  `Imported ${result.added} job${result.added === 1 ? "" : "s"}` +
-                    (result.rejected.length
-                      ? `, ${result.rejected.length} could not be added`
-                      : ""),
-                  true,
-                );
-              } catch (err: unknown) {
-                toast((err as Error).message);
+        {jobsArray.length > 0 && (
+          <span className="queue-badge">{jobsArray.length}</span>
+        )}
+        <div className="queue-stats">{stats}</div>
+        <span className="queue-note">{note}</span>
+        <div className="queue-actions">
+          <button
+            className={`btn btn-small${queue.paused ? " btn-primary" : ""}`}
+            onClick={() => {
+              api("/api/queue/pause", {
+                method: "POST",
+                body: JSON.stringify({ paused: !queue.paused }),
+              })
+                .then(() => setQueuePaused(!queue.paused))
+                .catch((err) => toast(err.message));
+            }}
+          >
+            <Icon name={queue.paused ? "play" : "pause"} />
+            {queue.paused ? "Resume" : "Pause"}
+          </button>
+          <button
+            className="btn btn-small btn-quiet"
+            onClick={() => setQueueSettingsOpen(!queueSettingsOpen)}
+          >
+            <Icon name="sliders" />
+            Options
+          </button>
+          <button
+            className="btn btn-small btn-quiet"
+            onClick={() => {
+              window.location.href = "/api/queue/export";
+            }}
+          >
+            <Icon name="export" />
+            Export
+          </button>
+          <button
+            className="btn btn-small btn-quiet"
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = "application/json,.json";
+              input.onchange = async (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (!file) return;
+                try {
+                  const result = await api<{ added: number; rejected: string[] }>(
+                    "/api/queue/import",
+                    { method: "POST", body: await file.text() },
+                  );
+                  toast(
+                    `Imported ${result.added} job${result.added === 1 ? "" : "s"}` +
+                      (result.rejected.length
+                        ? `, ${result.rejected.length} could not be added`
+                        : ""),
+                    true,
+                  );
+                } catch (err: unknown) {
+                  toast((err as Error).message);
+                }
+              };
+              input.click();
+            }}
+          >
+            <Icon name="import" />
+            Import
+          </button>
+          <button
+            className="btn btn-small btn-quiet"
+            onClick={async () => {
+              const finished = jobsArray.filter((j) =>
+                ["done", "failed", "canceled"].includes(j.status),
+              );
+              for (const job of finished) {
+                try {
+                  await api(`/api/jobs/${job.id}`, { method: "DELETE" });
+                } catch {}
               }
-            };
-            input.click();
-          }}
-        >
-          Import
-        </button>
-        <button
-          className="btn btn-small btn-quiet"
-          onClick={async () => {
-            const finished = jobsArray.filter((j) =>
-              ["done", "failed", "canceled"].includes(j.status),
-            );
-            for (const job of finished) {
-              try {
-                await api(`/api/jobs/${job.id}`, { method: "DELETE" });
-              } catch {}
-            }
-          }}
-        >
-          Clear finished
-        </button>
+            }}
+          >
+            <Icon name="trash" />
+            Clear finished
+          </button>
+        </div>
       </header>
 
       {queueSettingsOpen && (
@@ -112,7 +137,13 @@ export function Queue() {
 
       <div className="queue-list">
         {!jobsArray.length ? (
-          <p className="queue-empty">Nothing queued yet.</p>
+          <div className="queue-empty">
+            <p>Nothing queued yet.</p>
+            <p className="queue-empty-hint">
+              Pick a source and press &ldquo;Add to queue&rdquo; &mdash; files on
+              disk are not touched until an encode runs.
+            </p>
+          </div>
         ) : (
           jobsArray.map((job) => <JobRow key={job.id} job={job} />)
         )}
