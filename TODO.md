@@ -120,4 +120,3 @@
 - [ ] display ffprobe's results more elegantly
 - [ ] switch logging to zaplog (instance builder using github.com/fmotalleb/go-tools)
 - [ ] switch cli framework to cobra
-- [ ] split js/css application into multiple maintainable files

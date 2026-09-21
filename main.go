@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-//go:embed web
+//go:embed web-dist
 var webAssets embed.FS
 
 // version is stamped in at build time by GoReleaser and the Dockerfile.
@@ -141,7 +141,7 @@ func must(err error) {
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 
-	static, err := fs.Sub(webAssets, "web")
+	static, err := fs.Sub(webAssets, "web-dist")
 	must(err)
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 

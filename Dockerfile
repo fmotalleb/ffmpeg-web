@@ -8,16 +8,24 @@
 # Mounted folders must be writable by uid 10001 (the user the container runs
 # as): `chown -R 10001 "$PWD/videos"`.
 
+FROM node:22-alpine AS frontend
+
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ .
+RUN npm run build
+
+
 FROM golang:1.27-alpine AS build
 
 WORKDIR /src
 
-# No third-party Go dependencies, but keeping this split means the module
-# cache is only re-fetched when go.mod changes.
 COPY go.mod ./
 RUN go mod download
 
 COPY . .
+COPY --from=frontend /src/web-dist ./web-dist
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath \
