@@ -113,6 +113,16 @@ async function loadFrameOrClipPost(url: string, body: unknown) {
   return objURL;
 }
 
+async function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
+    img.src = url;
+  });
+}
+
 const FRAME_CACHE_MAX = 60;
 const frameCacheStore = new Map<string, string>();
 function frameCacheGet(key: string) {
@@ -130,6 +140,10 @@ function frameCacheSet(key: string, url: string) {
     frameCacheStore.delete(oldestKey);
     URL.revokeObjectURL(oldestURL);
   }
+}
+function frameCacheClear() {
+  frameCacheStore.forEach((url) => URL.revokeObjectURL(url));
+  frameCacheStore.clear();
 }
 
 export function PreviewPanel() {
@@ -231,6 +245,8 @@ export function PreviewPanel() {
   const settings = useStore((s) => s.settings);
   useEffect(() => {
     clearTimeout(loadTimerRef.current);
+    // Clear cache when settings/preset changes to force reload from server
+    if (settings) frameCacheClear();
     loadTimerRef.current = setTimeout(loadDiffFrames, 80);
     return () => clearTimeout(loadTimerRef.current);
   }, [previewTime, previewDur, previewJobId, diff.syncOffset, settings, loadDiffFrames]);
@@ -238,6 +254,7 @@ export function PreviewPanel() {
   // Immediate load on source change (no debounce)
   const source = useStore((s) => s.source);
   useEffect(() => {
+    frameCacheClear();
     loadDiffFrames();
   }, [source, previewJobId, loadDiffFrames]);
 
@@ -557,7 +574,7 @@ export function PreviewPanel() {
     } finally {
       setThumbGenerating(false);
     }
-  }, [thumbCount, thumbCols, thumbScale, thumbOutput]);
+  }, [thumbCount, thumbCols, thumbScale, thumbOutput, thumbSourceMode]);
 
   const hasFrames = !!(previewFrames.sourceURL && previewFrames.targetURL);
   const stacked = diff.mode === "split" || diff.mode === "overlay" || diff.mode === "flicker";
