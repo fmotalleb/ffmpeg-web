@@ -105,9 +105,7 @@ async function loadFrameOrClipPost(url: string, body: unknown) {
   if (!res.ok) {
     const text = await res.text();
     let msg = text;
-    try {
-      msg = JSON.parse(text).error || text;
-    } catch {}
+    try { msg = JSON.parse(text).error || text; } catch {}
     throw new Error(msg || `request failed (${res.status})`);
   }
   const objURL = URL.createObjectURL(await res.blob());
@@ -165,6 +163,12 @@ export function PreviewPanel() {
   const [thumbCols, setThumbCols] = useState(4);
   const [thumbScale, setThumbScale] = useState(320);
   const [thumbOutput] = useState<string | null>(null);
+  const [magnifierZoom, setMagnifierZoom] = useState(3);
+  const magnifierZoomRef = useRef(magnifierZoom);
+  const [magnifierShowsTarget, setMagnifierShowsTarget] = useState(true);
+  const magnifierShowsTargetRef = useRef(magnifierShowsTarget);
+  useEffect(() => { magnifierZoomRef.current = magnifierZoom; }, [magnifierZoom]);
+  useEffect(() => { magnifierShowsTargetRef.current = magnifierShowsTarget; }, [magnifierShowsTarget]);
 
   // Load subject metadata
   useEffect(() => {
@@ -253,6 +257,149 @@ export function PreviewPanel() {
     }
   }, [diff.mode, previewFrames.sourceURL, previewFrames.targetURL]);
 
+  // Difference canvas rendering
+  useEffect(() => {
+    if (diff.mode !== "difference") return;
+    const canvas = diffCanvasRef.current;
+    const baseEl = baseVideoRef.current;
+    const overlayEl = overlayVideoRef.current;
+    if (!canvas || !baseEl || !overlayEl) return;
+    const b = baseEl;
+    const o = overlayEl;
+
+    function draw() {
+      const w = Math.min(960, b.videoWidth || 640);
+      const h = Math.round(w * ((b.videoHeight || 360) / (b.videoWidth || 640)));
+      if (w === 0 || h === 0) return;
+      canvas!.width = w;
+      canvas!.height = h;
+      const ctx = canvas!.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(b, 0, 0, w, h);
+      const a = ctx.getImageData(0, 0, w, h);
+      ctx.drawImage(o, 0, 0, w, h);
+      const bb = ctx.getImageData(0, 0, w, h);
+      const out = ctx.createImageData(w, h);
+      for (let i = 0; i < a.data.length; i += 4) {
+        out.data[i] = Math.abs(a.data[i] - bb.data[i]);
+        out.data[i + 1] = Math.abs(a.data[i + 1] - bb.data[i + 1]);
+        out.data[i + 2] = Math.abs(a.data[i + 2] - bb.data[i + 2]);
+        out.data[i + 3] = 255;
+      }
+      ctx.putImageData(out, 0, 0);
+    }
+
+    let attempts = 0;
+    function tryDraw() {
+      if (b.readyState >= 2 && o.readyState >= 2) {
+        draw();
+        return;
+      }
+      if (++attempts > 30) return;
+      setTimeout(tryDraw, 50);
+    }
+    tryDraw();
+  }, [diff.mode, previewFrames.sourceURL, previewFrames.targetURL]);
+
+  // Divider drag
+  const draggingRef = useRef(false);
+  useEffect(() => {
+    const moveDrag = (clientX: number) => {
+      if (!draggingRef.current) return;
+      const rect = diffStageRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const pct = clampNum(((clientX - rect.left) / rect.width) * 100, 0, 100);
+      useStore.setState((s) => ({ diff: { ...s.diff, dividerPct: pct } }));
+      if (overlayVideoRef.current)
+        overlayVideoRef.current.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+      if (handleRef.current) handleRef.current.style.left = `${pct}%`;
+    };
+    const onMove = (e: MouseEvent) => moveDrag(e.clientX);
+    const onTouchMove = (e: TouchEvent) => moveDrag(e.touches[0].clientX);
+    const onUp = () => { draggingRef.current = false; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("touchmove", onTouchMove);
+    document.addEventListener("mouseup", onUp);
+    document.addEventListener("touchend", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("touchend", onUp);
+    };
+  }, []);
+
+  // Magnifier
+  const lastLensPos = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    const stage = diffStageRef.current;
+    if (!stage) return;
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!diff.magnifier) return;
+      const rect = stage.getBoundingClientRect();
+      let cx: number, cy: number;
+      if ("touches" in e) {
+        cx = e.touches[0].clientX - rect.left;
+        cy = e.touches[0].clientY - rect.top;
+      } else {
+        cx = e.clientX - rect.left;
+        cy = e.clientY - rect.top;
+      }
+      lastLensPos.current = { x: cx, y: cy };
+      positionLens(cx, cy, rect);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!diff.magnifier) return;
+      e.preventDefault();
+      setMagnifierZoom((z) => clampNum(z + (e.deltaY < 0 ? 0.4 : -0.4), 1.5, 8));
+    };
+    const onClick = (e: MouseEvent) => {
+      if (!diff.magnifier) return;
+      if ((e.target as HTMLElement)?.closest(".diff-handle")) return;
+      setMagnifierShowsTarget((v) => !v);
+    };
+    const onLeave = () => {
+      if (lensRef.current) lensRef.current.hidden = true;
+    };
+    stage.addEventListener("mousemove", onMove);
+    stage.addEventListener("touchmove", onMove, { passive: true });
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    stage.addEventListener("click", onClick);
+    stage.addEventListener("mouseleave", onLeave);
+    return () => {
+      stage.removeEventListener("mousemove", onMove);
+      stage.removeEventListener("touchmove", onMove);
+      stage.removeEventListener("wheel", onWheel);
+      stage.removeEventListener("click", onClick);
+      stage.removeEventListener("mouseleave", onLeave);
+    };
+  }, [diff.magnifier]);
+
+  const positionLens = (x: number, y: number, rect: DOMRect) => {
+    const lens = lensRef.current;
+    if (!lens) return;
+    const size = 190;
+    const zoom = magnifierZoom;
+    lens.style.width = `${size}px`;
+    lens.style.height = `${size}px`;
+    lens.style.left = `${x - size / 2}px`;
+    lens.style.top = `${y - size / 2}px`;
+    const activeEl = magnifierShowsTarget ? overlayVideoRef.current : baseVideoRef.current;
+    if (activeEl && activeEl.videoWidth) {
+      const fc = document.createElement("canvas");
+      fc.width = activeEl.videoWidth;
+      fc.height = activeEl.videoHeight;
+      fc.getContext("2d")!.drawImage(activeEl, 0, 0);
+      lens.style.backgroundImage = `url(${fc.toDataURL()})`;
+    } else {
+      const activeURL = magnifierShowsTarget ? previewFrames.targetURL : previewFrames.sourceURL;
+      lens.style.backgroundImage = activeURL ? `url(${activeURL})` : "none";
+    }
+    lens.style.backgroundSize = `${rect.width * zoom}px ${rect.height * zoom}px`;
+    lens.style.backgroundPosition = `${-(x * zoom - size / 2)}px ${-(y * zoom - size / 2)}px`;
+    lens.hidden = false;
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -260,30 +407,37 @@ export function PreviewPanel() {
       if (activeTab !== "preview") return;
       const tag = (document.activeElement as HTMLElement)?.tagName || "";
       if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
-      if (e.key === "ArrowRight") {
-        stepFrame(1);
+      if (e.key === "ArrowRight") { stepFrame(1); e.preventDefault(); }
+      else if (e.key === "ArrowLeft") { stepFrame(-1); e.preventDefault(); }
+      else if (e.key === " ") { togglePlay(); e.preventDefault(); }
+      else if (e.key === "[") {
+        useStore.setState((s) => ({ diff: { ...s.diff, syncOffset: s.diff.syncOffset - 33 } }));
+        loadDiffFrames();
         e.preventDefault();
-      } else if (e.key === "ArrowLeft") {
-        stepFrame(-1);
+      }
+      else if (e.key === "]") {
+        useStore.setState((s) => ({ diff: { ...s.diff, syncOffset: s.diff.syncOffset + 33 } }));
+        loadDiffFrames();
         e.preventDefault();
-      } else if (e.key === " ") {
-        togglePlay();
-        e.preventDefault();
-      } else if (e.key.toLowerCase() === "s") {
-        useStore.setState((s) => ({
-          diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget },
-        }));
+      }
+      else if (e.key.toLowerCase() === "s") {
+        useStore.setState((s) => ({ diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget } }));
+      }
+      else if (e.key.toLowerCase() === "f") {
+        const target = diff.mode === "side-by-side"
+          ? document.querySelector(".diff-sbs")
+          : diff.mode === "difference" ? diffCanvasRef.current : diffStageRef.current;
+        (target as HTMLElement)?.requestFullscreen?.().catch(() => {});
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
+  }, [diff.mode, previewFrames]);
 
   const stepFrame = async (delta: number) => {
     const fps = subjectMeta.fps > 0 ? subjectMeta.fps : 25;
     const t = previewTime + delta * (1 / fps);
     setPreviewTime(clampNum(t, 0, subjectMeta.duration || t));
-    loadDiffFrames();
   };
 
   const hasFrames = !!(previewFrames.sourceURL && previewFrames.targetURL);
@@ -300,9 +454,7 @@ export function PreviewPanel() {
             </span>
             <button
               className="btn btn-small btn-quiet"
-              onClick={() => {
-                setPreviewJobId(null);
-              }}
+              onClick={() => setPreviewJobId(null)}
             >
               Use current settings instead
             </button>
@@ -330,9 +482,7 @@ export function PreviewPanel() {
             max={subjectMeta.duration || 0}
             step={0.1}
             value={previewTime}
-            onChange={(e) => {
-              setPreviewTime(Number(e.target.value) || 0);
-            }}
+            onChange={(e) => setPreviewTime(Number(e.target.value) || 0)}
           />
         </label>
       </div>
@@ -358,32 +508,21 @@ export function PreviewPanel() {
         </button>
         <button
           className="btn btn-small btn-quiet"
-          onClick={() => {
-            setPreviewTime(settings.trim.start || 0);
-            loadDiffFrames();
-          }}
+          onClick={() => { setPreviewTime(settings.trim.start || 0); loadDiffFrames(); }}
         >
           Trim start
         </button>
         <button
           className="btn btn-small btn-quiet"
-          onClick={async () => {
-            const t = subjectMeta.duration / 2 || 0;
-            setPreviewTime(t);
-            loadDiffFrames();
-          }}
+          onClick={() => { setPreviewTime(subjectMeta.duration / 2 || 0); loadDiffFrames(); }}
         >
           Middle
         </button>
         <button
           className="btn btn-small btn-quiet"
-          onClick={async () => {
-            const t =
-              settings.trim.enabled && settings.trim.end > 0
-                ? settings.trim.end
-                : subjectMeta.duration;
-            setPreviewTime(t);
-            loadDiffFrames();
+          onClick={() => {
+            const t = settings.trim.enabled && settings.trim.end > 0 ? settings.trim.end : subjectMeta.duration;
+            setPreviewTime(t); loadDiffFrames();
           }}
         >
           Trim end
@@ -393,10 +532,7 @@ export function PreviewPanel() {
           <span>Duration</span>
           <select
             value={previewDur}
-            onChange={(e) => {
-              setPreviewDur(Number(e.target.value) || 0.5);
-              loadDiffFrames();
-            }}
+            onChange={(e) => { setPreviewDur(Number(e.target.value) || 0.5); loadDiffFrames(); }}
           >
             <option value={0.25}>0.25s</option>
             <option value={0.5}>0.5s</option>
@@ -411,27 +547,19 @@ export function PreviewPanel() {
 
       <div className="diff-toolbar">
         <div className="segmented" role="group" aria-label="Comparison mode">
-          {(["split", "side-by-side", "overlay", "difference", "flicker"] as const).map(
-            (mode) => (
-              <button
-                key={mode}
-                className={`seg${diff.mode === mode ? " is-active" : ""}`}
-                onClick={() => setDiffMode(mode)}
-              >
-                {mode === "side-by-side"
-                  ? "Side by side"
-                  : mode.charAt(0).toUpperCase() + mode.slice(1)}
-              </button>
-            ),
-          )}
+          {(["split", "side-by-side", "overlay", "difference", "flicker"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={`seg${diff.mode === mode ? " is-active" : ""}`}
+              onClick={() => setDiffMode(mode)}
+            >
+              {mode === "side-by-side" ? "Side by side" : mode.charAt(0).toUpperCase() + mode.slice(1)}
+            </button>
+          ))}
         </div>
         <button
           className="btn btn-small"
-          onClick={() =>
-            useStore.setState((s) => ({
-              diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget },
-            }))
-          }
+          onClick={() => useStore.setState((s) => ({ diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget } }))}
           title="Swap source/target (S)"
         >
           Swap
@@ -439,19 +567,47 @@ export function PreviewPanel() {
         <button className="btn btn-small" onClick={togglePlay}>
           {diff.playing ? "\u23f8 Pause" : "\u25b6 Play"}
         </button>
+        <label className="field" id="diff-sync-field">
+          <span>
+            Sync offset <em className="hint">{diff.syncOffset}ms</em>
+          </span>
+          <input
+            type="range"
+            min={-500}
+            max={500}
+            value={diff.syncOffset}
+            step={10}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              useStore.setState((s) => ({ diff: { ...s.diff, syncOffset: v } }));
+              loadDiffFrames();
+            }}
+          />
+        </label>
         <span className="spacer" />
+        <label className="field check" id="diff-magnifier-field">
+          <input
+            type="checkbox"
+            checked={diff.magnifier}
+            onChange={(e) => {
+              useStore.setState((s) => ({ diff: { ...s.diff, magnifier: e.target.checked } }));
+              if (!e.target.checked && lensRef.current) lensRef.current.hidden = true;
+            }}
+          />
+          <span>Magnifier — click to switch, scroll to zoom</span>
+        </label>
+        {diff.magnifier && (
+          <span className="diff-mag-label">
+            Viewing: {magnifierShowsTarget ? "Target" : "Source"}
+          </span>
+        )}
         <button
           className="btn btn-small btn-quiet"
           onClick={() => {
-            const target =
-              diff.mode === "side-by-side"
-                ? document.querySelector(".diff-sbs")
-                : diff.mode === "difference"
-                  ? diffCanvasRef.current
-                  : diffStageRef.current;
-            (target as HTMLElement)?.requestFullscreen?.().catch((err: unknown) =>
-              toast((err as Error).message),
-            );
+            const target = diff.mode === "side-by-side"
+              ? document.querySelector(".diff-sbs")
+              : diff.mode === "difference" ? diffCanvasRef.current : diffStageRef.current;
+            (target as HTMLElement)?.requestFullscreen?.().catch((err: unknown) => toast((err as Error).message));
           }}
           title="Fullscreen (F)"
         >
@@ -460,10 +616,9 @@ export function PreviewPanel() {
       </div>
 
       {diff.mode === "overlay" && (
-        <label className="field field-wide">
+        <label className="field field-wide" id="diff-opacity-field">
           <span>
-            Overlay opacity{" "}
-            <em className="hint">{diff.opacity}%</em>
+            Overlay opacity <em className="hint">{diff.opacity}%</em>
           </span>
           <input
             type="range"
@@ -473,8 +628,7 @@ export function PreviewPanel() {
             onChange={(e) => {
               const v = Number(e.target.value);
               useStore.setState((s) => ({ diff: { ...s.diff, opacity: v } }));
-              if (overlayVideoRef.current)
-                overlayVideoRef.current.style.opacity = String(v / 100);
+              if (overlayVideoRef.current) overlayVideoRef.current.style.opacity = String(v / 100);
             }}
           />
         </label>
@@ -484,9 +638,19 @@ export function PreviewPanel() {
         <div ref={diffStageRef} className="diff-stage">
           {!hasFrames && (
             <p className="diff-empty">
-              Pick a source, then move the timeline to load a frame from the
-              source and the target.
+              Pick a source, then move the timeline to load a frame from the source and the target.
             </p>
+          )}
+          {diff.mode === "split" && hasFrames && (
+            <span
+              className="original-label"
+              style={{
+                left: diff.overlayIsTarget ? "" : "8px",
+                right: diff.overlayIsTarget ? "8px" : "",
+              }}
+            >
+              Source
+            </span>
           )}
           <video
             ref={baseVideoRef}
@@ -507,21 +671,17 @@ export function PreviewPanel() {
             src={previewFrames.targetURL || ""}
             style={{
               opacity: diff.mode === "overlay" ? diff.opacity / 100 : 1,
-              clipPath:
-                diff.mode === "split"
-                  ? `inset(0 ${100 - diff.dividerPct}% 0 0)`
-                  : "inset(0)",
-              visibility:
-                diff.mode === "difference" ? "hidden" : undefined,
+              clipPath: diff.mode === "split" ? `inset(0 ${100 - diff.dividerPct}% 0 0)` : "inset(0)",
+              visibility: diff.mode === "difference" ? "hidden" : undefined,
             }}
           />
-          {diff.mode === "split" && (
+          {diff.mode === "split" && hasFrames && (
             <div
               ref={handleRef}
               className="diff-handle"
               style={{ left: `${diff.dividerPct}%` }}
-              onMouseDown={() => {}}
-              onTouchStart={() => {}}
+              onMouseDown={() => { draggingRef.current = true; }}
+              onTouchStart={() => { draggingRef.current = true; }}
             >
               <span />
             </div>
@@ -536,29 +696,17 @@ export function PreviewPanel() {
       ) : (
         <div className="diff-sbs">
           <figure>
-            <video
-              ref={sbsSourceRef}
-              muted
-              playsInline
-              loop
-              src={previewFrames.sourceURL || ""}
-            />
+            <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
             <figcaption>Source</figcaption>
           </figure>
           <figure>
-            <video
-              ref={sbsTargetRef}
-              muted
-              playsInline
-              loop
-              src={previewFrames.targetURL || ""}
-            />
+            <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
             <figcaption>Target</figcaption>
           </figure>
         </div>
       )}
 
-      <p className="note">
+      <p className="note" id="diff-note">
         {previewFrames.targetIsFinal
           ? "The target clip is from the actual encoded file."
           : "The target clip is a live preview of the current settings \u2014 actual compression will look slightly softer."}
@@ -576,6 +724,21 @@ export function PreviewPanel() {
         >
           Download target
         </button>
+        {diff.mode === "difference" && (
+          <button
+            className="btn btn-small btn-quiet"
+            onClick={() => {
+              diffCanvasRef.current?.toBlob((blob) => {
+                if (!blob) { toast("Nothing to download yet"); return; }
+                const url = URL.createObjectURL(blob);
+                downloadURL(url, `difference-${frameFileStamp(previewFrames.time)}.png`);
+                setTimeout(() => URL.revokeObjectURL(url), 4000);
+              }, "image/png");
+            }}
+          >
+            Download difference
+          </button>
+        )}
       </div>
 
       <h3 className="group-title">Contact Sheet</h3>
@@ -596,47 +759,23 @@ export function PreviewPanel() {
         </div>
         <label className="field">
           <span>How many</span>
-          <input
-            type="number"
-            min={2}
-            max={36}
-            value={thumbCount}
-            onChange={(e) => setThumbCount(Number(e.target.value))}
-          />
+          <input type="number" min={2} max={36} value={thumbCount} onChange={(e) => setThumbCount(Number(e.target.value))} />
         </label>
         <label className="field">
           <span>Columns</span>
-          <input
-            type="number"
-            min={2}
-            max={8}
-            value={thumbCols}
-            onChange={(e) => setThumbCols(Number(e.target.value))}
-          />
+          <input type="number" min={2} max={8} value={thumbCols} onChange={(e) => setThumbCols(Number(e.target.value))} />
         </label>
         <label className="field">
           <span>Size (px)</span>
-          <input
-            type="number"
-            min={80}
-            max={640}
-            step={20}
-            value={thumbScale}
-            onChange={(e) => setThumbScale(Number(e.target.value))}
-          />
+          <input type="number" min={80} max={640} step={20} value={thumbScale} onChange={(e) => setThumbScale(Number(e.target.value))} />
         </label>
-        <button className="btn btn-small" onClick={() => generateContactSheet()}>
+        <button className="btn btn-small" onClick={() => toast("Contact sheet generation coming soon")}>
           Generate
         </button>
         {thumbOutput && (
           <button
             className="btn btn-small btn-quiet"
-            onClick={() => {
-              const a = document.createElement("a");
-              a.href = thumbOutput;
-              a.download = "contact-sheet.png";
-              a.click();
-            }}
+            onClick={() => { const a = document.createElement("a"); a.href = thumbOutput; a.download = "contact-sheet.png"; a.click(); }}
           >
             Download
           </button>
@@ -652,19 +791,11 @@ export function PreviewPanel() {
 }
 
 function downloadURL(url: string | null, filename: string) {
-  if (!url) {
-    toast("No frame loaded yet");
-    return;
-  }
+  if (!url) { toast("No frame loaded yet"); return; }
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   document.body.append(a);
   a.click();
   a.remove();
-}
-
-function generateContactSheet() {
-  // Placeholder - implemented in full version
-  toast("Contact sheet generation is available");
 }
