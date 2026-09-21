@@ -1,5 +1,12 @@
 import { useStore } from "../../store";
-import { encoderNames, formatDuration, parseTimecode } from "../../utils";
+import { TrimRange } from "../TrimRange";
+import {
+  codecForEncoder,
+  encoderNames,
+  formatDuration,
+  librariesForCodec,
+  parseTimecode,
+} from "../../utils";
 
 function outputDimensions(
   source: ReturnType<typeof useStore.getState>["source"],
@@ -40,10 +47,15 @@ export function SummaryPanel() {
   const source = useStore((s) => s.source);
   const settings = useStore((s) => s.settings);
   const updateSettings = useStore((s) => s.updateSettings);
+  const encoders = useStore((s) => s.encoders);
 
   const dims = outputDimensions(source, settings);
   const s = settings;
   const names = encoderNames;
+  const library = librariesForCodec(
+    encoders,
+    codecForEncoder[s.video.encoder] || "",
+  ).find((l) => l.id === s.video.library);
   const rows: [string, string][] = [
     ["Source", source ? source.name : "nothing chosen yet"],
     [
@@ -54,7 +66,7 @@ export function SummaryPanel() {
             s.video.rateMode === "quality"
               ? `quality ${s.video.quality}`
               : `${s.video.bitrate} kbit/s${s.video.twoPass ? " \u00b7 two passes" : ""}`
-          } \u00b7 ${s.video.speed}`,
+          } \u00b7 ${s.video.speed}${library ? ` \u00b7 ${library.name}` : ""}`,
     ],
     ["Picture", dims ? `${dims.w}\u00d7${dims.h}` : "\u2014"],
     [
@@ -151,6 +163,12 @@ export function SummaryPanel() {
           />
         </label>
       </div>
+
+      <p className="note">
+        Or drag the two handles below. Hold one for half a second and the frame
+        underneath it appears, so you can see exactly where the cut lands.
+      </p>
+      <TrimRange />
 
       <h3 className="group-title">What will happen</h3>
       <dl className="recap">

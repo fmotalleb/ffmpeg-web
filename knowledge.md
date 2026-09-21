@@ -31,6 +31,7 @@ go run . -root ~/Videos -out ~/Videos/encoded
 | `main.go` | HTTP routes, path sandboxing, uploads, SSE endpoint, entry point |
 | `jobs.go` | Job queue manager, ffmpeg supervision, progress parsing, event broker |
 | `ffmpeg.go` | `Spec` types and ffmpeg argument builder (filters, rate control, two-pass) |
+| `encoders.go` | Encoder library catalog (software and hardware) and what the local ffmpeg build supports |
 | `probe.go` | ffprobe wrapper |
 | `presets.go` | Built-in encoding presets |
 | `store.go` | Atomic JSON queue file persistence (coalesced writes) |

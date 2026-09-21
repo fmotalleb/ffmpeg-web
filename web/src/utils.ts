@@ -1,3 +1,5 @@
+import type { EncoderCatalog, EncoderLibrary } from "./types";
+
 export function formatBytes(n: number): string {
   if (!n || n <= 0) return "\u2014";
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -63,6 +65,22 @@ export const qualityScales: Record<string, { max: number; good: number }> = {
   vp9: { max: 63, good: 31 },
   av1: { max: 63, good: 32 },
 };
+
+// The codec family behind each entry of the encoder picker. The backend uses
+// the same mapping to group its encoder library catalog.
+export const codecForEncoder: Record<string, string> = {
+  x264: "h264",
+  x265: "hevc",
+  vp9: "vp9",
+  av1: "av1",
+};
+
+export function librariesForCodec(
+  catalog: EncoderCatalog,
+  codec: string,
+): EncoderLibrary[] {
+  return catalog.libraries.filter((l) => l.codec === codec);
+}
 
 export function frameFileStamp(t: number): string {
   return formatPreciseTime(t).replace(":", "m").replace(".", "s");

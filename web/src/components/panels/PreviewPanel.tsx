@@ -152,6 +152,7 @@ export function PreviewPanel() {
   const previewDur = useStore((s) => s.previewDur);
   const previewFrames = useStore((s) => s.previewFrames);
   const diff = useStore((s) => s.diff);
+  const source = useStore((s) => s.source);
 
   const diffStageRef = useRef<HTMLDivElement>(null);
   const baseVideoRef = useRef<HTMLVideoElement>(null);
@@ -185,12 +186,25 @@ export function PreviewPanel() {
   const subjectMetaRef = useRef(subjectMeta);
   subjectMetaRef.current = subjectMeta;
 
-  // Load subject metadata
+  // Load subject metadata. The duration is the timeline's range, so whenever
+  // the subject changes the old numbers must go with it — and a playhead left
+  // past the end of the new file is pulled back onto it.
   useEffect(() => {
+    const applyMeta = (duration: number, fps: number) => {
+      setSubjectMeta({ duration, fps });
+      const at = useStore.getState().previewTime;
+      if (duration > 0 && at > duration) {
+        useStore.getState().setPreviewTime(duration);
+      }
+    };
+
     const subject = currentPreviewSubject();
-    if (!subject) return;
+    if (!subject) {
+      applyMeta(0, 0);
+      return;
+    }
     if (subject.duration && subject.fps) {
-      setSubjectMeta({ duration: subject.duration, fps: subject.fps });
+      applyMeta(subject.duration, subject.fps);
       return;
     }
     if (previewJobId) {
@@ -202,15 +216,12 @@ export function PreviewPanel() {
         })
           .then((info: unknown) => {
             const i = info as { duration: number; video: { fps: number } | null };
-            setSubjectMeta({
-              duration: i.duration || 0,
-              fps: i.video ? i.video.fps : 0,
-            });
+            applyMeta(i.duration || 0, i.video ? i.video.fps : 0);
           })
           .catch(() => {});
       }
     }
-  }, [previewJobId]);
+  }, [previewJobId, source]);
 
   // Load diff frames — only depends on the values that determine the URL,
   // not on previewTime (which changes every slider tick).
@@ -252,7 +263,6 @@ export function PreviewPanel() {
   }, [previewTime, previewDur, previewJobId, diff.syncOffset, settings, loadDiffFrames]);
 
   // Immediate load on source change (no debounce)
-  const source = useStore((s) => s.source);
   useEffect(() => {
     frameCacheClear();
     loadDiffFrames();
@@ -579,6 +589,94 @@ export function PreviewPanel() {
   const hasFrames = !!(previewFrames.sourceURL && previewFrames.targetURL);
   const stacked = diff.mode === "split" || diff.mode === "overlay" || diff.mode === "flicker";
 
+  // The picture sits at the top of the tab with the timeline directly under it,
+  // so scrubbing never means scrolling past the toolbars first.
+  const stage = diff.mode !== "side-by-side" ? (
+    <div ref={diffStageRef} className="diff-stage">
+      {!hasFrames && (
+        <p className="diff-empty">
+          Pick a source, then move the timeline to load a frame from the source and the result.
+        </p>
+      )}
+      {hasFrames && diff.mode === "split" && (
+        <>
+          <span className="original-label" style={{ left: "8px" }}>Source</span>
+          <span className="result-label" style={{ right: "8px" }}>Result</span>
+        </>
+      )}
+      {hasFrames && diff.mode === "overlay" && (
+        <span className="overlay-info-label">
+          Source (behind) / Result (front, {diff.opacity}%)
+        </span>
+      )}
+      {hasFrames && diff.mode === "flicker" && (
+        <span className="flicker-label">
+          Showing: {flickerLabel}
+        </span>
+      )}
+      {hasFrames && diff.mode === "difference" && (
+        <span className="diff-info-label">
+          Source vs Result — pixel difference
+        </span>
+      )}
+      {hasFrames && (
+        <>
+          <video
+            ref={baseVideoRef}
+            className="diff-img"
+            muted
+            playsInline
+            loop
+            hidden={!stacked}
+            src={previewFrames.sourceURL || ""}
+          />
+          <video
+            ref={overlayVideoRef}
+            className="diff-img"
+            muted
+            playsInline
+            loop
+            hidden={!stacked}
+            src={previewFrames.targetURL || ""}
+            style={{
+              opacity: diff.mode === "overlay" ? diff.opacity / 100 : 1,
+              clipPath: diff.mode === "split" ? `inset(0 0 0 ${diff.dividerPct}%)` : "inset(0)",
+              visibility: diff.mode === "difference" ? "hidden" : undefined,
+            }}
+          />
+        </>
+      )}
+      {diff.mode === "split" && hasFrames && (
+        <div
+          ref={handleRef}
+          className="diff-handle"
+          style={{ left: `${diff.dividerPct}%` }}
+          onMouseDown={() => { draggingRef.current = true; }}
+          onTouchStart={() => { draggingRef.current = true; }}
+        >
+          <span />
+        </div>
+      )}
+      <div ref={lensRef} className="diff-lens" hidden={!diff.magnifier} />
+      <canvas
+        ref={diffCanvasRef}
+        className="diff-canvas"
+        style={{ display: diff.mode === "difference" ? "" : "none" }}
+      />
+    </div>
+  ) : (
+    <div className="diff-sbs">
+      <figure>
+        <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
+        <figcaption>Source</figcaption>
+      </figure>
+      <figure>
+        <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
+        <figcaption>Result</figcaption>
+      </figure>
+    </div>
+  );
+
   return (
     <section className="panel is-active">
       <div className="preview-subject">
@@ -601,6 +699,8 @@ export function PreviewPanel() {
           </span>
         )}
       </div>
+
+      {stage}
 
       <div className="grid">
         <label className="field field-wide">
@@ -766,92 +866,6 @@ export function PreviewPanel() {
             }}
           />
         </label>
-      )}
-
-      {diff.mode !== "side-by-side" ? (
-        <div ref={diffStageRef} className="diff-stage">
-          {!hasFrames && (
-            <p className="diff-empty">
-              Pick a source, then move the timeline to load a frame from the source and the result.
-            </p>
-          )}
-          {hasFrames && diff.mode === "split" && (
-            <>
-              <span className="original-label" style={{ left: "8px" }}>Source</span>
-              <span className="result-label" style={{ right: "8px" }}>Result</span>
-            </>
-          )}
-          {hasFrames && diff.mode === "overlay" && (
-            <span className="overlay-info-label">
-              Source (behind) / Result (front, {diff.opacity}%)
-            </span>
-          )}
-          {hasFrames && diff.mode === "flicker" && (
-            <span className="flicker-label">
-              Showing: {flickerLabel}
-            </span>
-          )}
-          {hasFrames && diff.mode === "difference" && (
-            <span className="diff-info-label">
-              Source vs Result — pixel difference
-            </span>
-          )}
-          {hasFrames && (
-            <>
-              <video
-                ref={baseVideoRef}
-                className="diff-img"
-                muted
-                playsInline
-                loop
-                hidden={!stacked}
-                src={previewFrames.sourceURL || ""}
-              />
-              <video
-                ref={overlayVideoRef}
-                className="diff-img"
-                muted
-                playsInline
-                loop
-                hidden={!stacked}
-                src={previewFrames.targetURL || ""}
-                style={{
-                  opacity: diff.mode === "overlay" ? diff.opacity / 100 : 1,
-                  clipPath: diff.mode === "split" ? `inset(0 0 0 ${diff.dividerPct}%)` : "inset(0)",
-                  visibility: diff.mode === "difference" ? "hidden" : undefined,
-                }}
-              />
-            </>
-          )}
-          {diff.mode === "split" && hasFrames && (
-            <div
-              ref={handleRef}
-              className="diff-handle"
-              style={{ left: `${diff.dividerPct}%` }}
-              onMouseDown={() => { draggingRef.current = true; }}
-              onTouchStart={() => { draggingRef.current = true; }}
-            >
-              <span />
-            </div>
-          )}
-          <div ref={lensRef} className="diff-lens" hidden={!diff.magnifier} />
-          <canvas
-            ref={diffCanvasRef}
-            className="diff-canvas"
-            style={{ display: diff.mode === "difference" ? "" : "none" }}
-          />
-        </div>
-      ) : (
-        <div className="diff-sbs">
-          <figure>
-            <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
-            <figcaption>Source</figcaption>
-          </figure>
-          <figure>
-            <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
-            <figcaption>Result</figcaption>
-          </figure>
-        </div>
       )}
 
       <p className="note" id="diff-note">

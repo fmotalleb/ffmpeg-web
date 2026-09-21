@@ -18,7 +18,7 @@ import { FileBrowser } from "./components/modals/FileBrowser";
 import { BatchEncode } from "./components/modals/BatchEncode";
 import { ProbeViewer } from "./components/modals/ProbeViewer";
 import { Toast } from "./components/Toast";
-import type { Job, Snapshot } from "./types";
+import type { EncoderCatalog, Job, Snapshot } from "./types";
 
 export function App() {
   const {
@@ -31,6 +31,7 @@ export function App() {
     removeJob,
     reorderJobs,
     fitToSource,
+    setEncoders,
     source,
   } = useStore();
 
@@ -47,6 +48,13 @@ export function App() {
       .then((cfg) => setConfig(cfg))
       .catch(() => {});
   }, [setConfig]);
+
+  // Load the encoder library catalog (which libraries this ffmpeg build has)
+  useEffect(() => {
+    api<EncoderCatalog>("/api/encoders")
+      .then((catalog) => setEncoders(catalog))
+      .catch(() => {});
+  }, [setEncoders]);
 
   // Load presets + apply first
   useEffect(() => {
