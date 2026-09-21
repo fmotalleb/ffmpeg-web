@@ -80,6 +80,8 @@ func main() {
 		}
 	}
 
+	probeEncoders(*ffmpegBin)
+
 	queuePath := *queueFile
 	if queuePath == "" {
 		queuePath = filepath.Join(outDir, "queue.json")
@@ -152,6 +154,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/probe/raw", s.handleProbeRaw)
 	mux.HandleFunc("POST /api/upload", s.handleUpload)
 	mux.HandleFunc("GET /api/presets", s.handlePresets)
+	mux.HandleFunc("GET /api/encoders", s.handleEncoders)
 
 	mux.HandleFunc("GET /api/jobs", s.handleListJobs)
 	mux.HandleFunc("POST /api/jobs", s.handleCreateJob)

@@ -10,6 +10,8 @@ export function Queue() {
   const queueSettingsOpen = useStore((s) => s.queueSettingsOpen);
   const setQueueSettingsOpen = useStore((s) => s.setQueueSettingsOpen);
   const setQueuePaused = useStore((s) => s.setQueuePaused);
+  const queueCollapsed = useStore((s) => s.queueCollapsed);
+  const setQueueCollapsed = useStore((s) => s.setQueueCollapsed);
 
   const jobsArray = Array.from(jobs.values());
 
@@ -42,8 +44,26 @@ export function Queue() {
       : "";
 
   return (
-    <section className="queue" aria-label="Queue">
+    <section
+      className={`queue${queueCollapsed ? " collapsed" : ""}`}
+      aria-label="Queue"
+    >
       <header className="queue-head">
+        <button
+          className="btn btn-small btn-quiet queue-toggle"
+          onClick={() => setQueueCollapsed(!queueCollapsed)}
+          aria-expanded={!queueCollapsed}
+          title={
+            queueCollapsed
+              ? "Show the job list"
+              : "Hide the job list and give the screen back to the settings"
+          }
+        >
+          <span className={`queue-chevron${queueCollapsed ? " is-collapsed" : ""}`}>
+            <Icon name="chevron" />
+          </span>
+          {queueCollapsed ? "Show" : "Hide"}
+        </button>
         <h2>Queue</h2>
         {jobsArray.length > 0 && (
           <span className="queue-badge">{jobsArray.length}</span>
@@ -131,23 +151,25 @@ export function Queue() {
         </div>
       </header>
 
-      {queueSettingsOpen && (
+      {!queueCollapsed && queueSettingsOpen && (
         <QueueSettingsPanel />
       )}
 
-      <div className="queue-list">
-        {!jobsArray.length ? (
-          <div className="queue-empty">
-            <p>Nothing queued yet.</p>
-            <p className="queue-empty-hint">
-              Pick a source and press &ldquo;Add to queue&rdquo; &mdash; files on
-              disk are not touched until an encode runs.
-            </p>
-          </div>
-        ) : (
-          jobsArray.map((job) => <JobRow key={job.id} job={job} />)
-        )}
-      </div>
+      {!queueCollapsed && (
+        <div className="queue-list">
+          {!jobsArray.length ? (
+            <div className="queue-empty">
+              <p>Nothing queued yet.</p>
+              <p className="queue-empty-hint">
+                Pick a source and press &ldquo;Add to queue&rdquo; &mdash; files
+                on disk are not touched until an encode runs.
+              </p>
+            </div>
+          ) : (
+            jobsArray.map((job) => <JobRow key={job.id} job={job} />)
+          )}
+        </div>
+      )}
     </section>
   );
 }

@@ -32,6 +32,7 @@ type ExtraSpec struct {
 
 type VideoSpec struct {
 	Encoder  string  `json:"encoder"`  // x264 | x265 | vp9 | av1 | copy
+	Library  string  `json:"library"`  // encoding library: sw | nvenc | qsv | vaapi | videotoolbox | amf
 	RateMode string  `json:"rateMode"` // quality | bitrate
 	Quality  float64 `json:"quality"`  // CRF / CQ
 	Bitrate  int     `json:"bitrate"`  // kbit/s
@@ -98,6 +99,49 @@ var videoEncoders = map[string]string{
 	"copy": "copy",
 }
 
+// resolveVideoEncoder turns the codec + library pair chosen in the UI into the
+// ffmpeg encoder name, together with the library describing how to drive it.
+func resolveVideoEncoder(v VideoSpec) (string, encoderLib) {
+	if v.Encoder == "copy" {
+		return "copy", encoderLib{}
+	}
+	lib, ok := resolveLibrary(v.Library, v.Encoder)
+	if !ok {
+		// Unknown codec: keep the historical default.
+		lib, _ = resolveLibrary("sw", "x264")
+		return videoEncoders["x264"], lib
+	}
+	if lib.engine == "software" {
+		if enc := videoEncoders[v.Encoder]; enc != "" {
+			return enc, lib
+		}
+		return videoEncoders["x264"], lib
+	}
+	return lib.FFmpeg, lib
+}
+
+// twoPassWanted reports whether the spec asks for a two-pass bitrate run and
+// the chosen library can actually do one.
+func twoPassWanted(spec Spec) bool {
+	if !spec.Video.TwoPass || spec.Video.RateMode != "bitrate" || spec.Video.Encoder == "copy" {
+		return false
+	}
+	_, lib := resolveVideoEncoder(spec.Video)
+	return lib.SupportsTwoPass
+}
+
+// checkVideoEncoder refuses an encoder the local ffmpeg build does not have,
+// so the user hears about it when the job is added instead of when it fails.
+func checkVideoEncoder(enc string) error {
+	if enc == "copy" || ffmpegVideoEncoders == nil || len(ffmpegVideoEncoders) == 0 {
+		return nil
+	}
+	if !ffmpegVideoEncoders[enc] {
+		return fmt.Errorf("this ffmpeg build has no %s encoder — pick another library", enc)
+	}
+	return nil
+}
+
 var audioEncoders = map[string]string{
 	"aac":  "aac",
 	"opus": "libopus",
@@ -105,6 +149,22 @@ var audioEncoders = map[string]string{
 	"ac3":  "ac3",
 	"flac": "flac",
 	"copy": "copy",
+}
+
+// Each hardware library has its own idea of a speed preset, so the familiar
+// x264 words are translated into whatever that encoder understands.
+
+// NVENC: p1 is fastest, p7 is slowest (and best).
+var nvencPresets = map[string]string{
+	"ultrafast": "p1", "veryfast": "p2", "faster": "p3", "fast": "p4",
+	"medium": "p5", "slow": "p6", "slower": "p7", "veryslow": "p7",
+}
+
+// Quick Sync has no ultrafast step.
+var qsvPresets = map[string]string{
+	"ultrafast": "veryfast", "veryfast": "veryfast", "faster": "faster",
+	"fast": "fast", "medium": "medium", "slow": "slow",
+	"slower": "slower", "veryslow": "veryslow",
 }
 
 // svtav1 takes a numeric preset; map the familiar x264 words onto it.
@@ -131,8 +191,10 @@ func mixdownChannels(m string) string {
 	return ""
 }
 
-// filterChain assembles the -vf graph. Returns "" when no video filtering is needed.
-func filterChain(s Spec, input string) string {
+// filterChain assembles the -vf graph. Returns "" when no video filtering is
+// needed. engine is the chosen encoder library, which decides how the final
+// frames have to be laid out.
+func filterChain(s Spec, input, engine string) string {
 	p, f := s.Picture, s.Filters
 	var chain []string
 
@@ -201,11 +263,36 @@ func filterChain(s Spec, input string) string {
 		chain = append(chain, fmt.Sprintf("subtitles=%s:si=%d",
 			escapeFilterPath(input), s.Subtitle.Track))
 	}
-	if p.PixelFormat != "" {
-		chain = append(chain, "format="+p.PixelFormat)
+	switch {
+	case engine == "vaapi":
+		// VAAPI encoders only accept frames that already live in GPU memory,
+		// so the graph has to upload them in a format the driver likes.
+		pix := "nv12"
+		if strings.Contains(p.PixelFormat, "10") {
+			pix = "p010"
+		}
+		chain = append(chain, "format="+pix, "hwupload")
+	case p.PixelFormat != "":
+		chain = append(chain, "format="+hwPixelFormat(engine, p.PixelFormat))
 	}
 
 	return strings.Join(chain, ",")
+}
+
+// hwPixelFormat spells a pixel format the way a hardware encoder expects it.
+// ffmpeg's generic yuv420p names only work for the software encoders; the
+// hardware ones want NV12 (or P010 for 10-bit).
+func hwPixelFormat(engine, pf string) string {
+	switch engine {
+	case "nvenc", "qsv", "amf":
+		if strings.Contains(pf, "10") {
+			return "p010le"
+		}
+		if engine == "qsv" && strings.HasPrefix(pf, "yuv420p") {
+			return "nv12"
+		}
+	}
+	return pf
 }
 
 // escapeFilterPath quotes a path for use inside a filter argument.
@@ -250,6 +337,17 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	}
 	args = append(args, inputExtra...)
 
+	enc, lib := resolveVideoEncoder(s.Video)
+	if err := checkVideoEncoder(enc); err != nil {
+		return nil, err
+	}
+	if pass > 0 && !lib.SupportsTwoPass {
+		return nil, fmt.Errorf("%s cannot do two-pass encoding — switch two passes off or pick another library", orDefault(lib.Name, "this encoder"))
+	}
+	if lib.engine == "vaapi" {
+		args = append(args, "-vaapi_device", vaapiDevice())
+	}
+
 	if s.Trim.Enabled && s.Trim.Start > 0 {
 		args = append(args, "-ss", trimFloat(s.Trim.Start))
 	}
@@ -269,27 +367,15 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	}
 
 	// ---- video ----
-	enc := videoEncoders[s.Video.Encoder]
-	if enc == "" {
-		enc = "libx264"
-	}
-	if vf := filterChain(s, input); vf != "" && enc != "copy" {
+	if vf := filterChain(s, input, lib.engine); vf != "" && enc != "copy" {
 		args = append(args, "-vf", vf)
 	}
 	args = append(args, "-c:v", enc)
 
 	if enc != "copy" {
-		switch enc {
-		case "libx264", "libx265":
-			args = append(args, "-preset", orDefault(s.Video.Speed, "medium"))
-			if s.Video.Tune != "" && s.Video.Tune != "none" {
-				args = append(args, "-tune", s.Video.Tune)
-			}
-		case "libsvtav1":
-			args = append(args, "-preset", orDefault(av1Presets[s.Video.Speed], "7"))
-		case "libvpx-vp9":
-			args = append(args, "-cpu-used", orDefault(vp9CPUUsed[s.Video.Speed], "3"),
-				"-row-mt", "1", "-deadline", "good")
+		args = append(args, speedArgs(s.Video, lib, enc)...)
+		if lib.SupportsTune && s.Video.Tune != "" && s.Video.Tune != "none" {
+			args = append(args, "-tune", s.Video.Tune)
 		}
 
 		if opts := strings.TrimSpace(s.Extra.EncoderOptions); opts != "" {
@@ -305,21 +391,13 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 			args = append(args, "-b:v", br, "-maxrate", br,
 				"-bufsize", strconv.Itoa(s.Video.Bitrate*2)+"k")
 		} else {
-			q := trimFloat(math.Round(s.Video.Quality*10) / 10)
-			switch enc {
-			case "libvpx-vp9":
-				args = append(args, "-crf", q, "-b:v", "0")
-			case "libsvtav1":
-				args = append(args, "-crf", q)
-			default:
-				args = append(args, "-crf", q)
-			}
+			args = append(args, qualityArgs(s.Video, lib, enc)...)
 		}
 
 		if s.Video.Profile != "" && s.Video.Profile != "auto" {
 			args = append(args, "-profile:v", s.Video.Profile)
 		}
-		if s.Video.Level != "" && s.Video.Level != "auto" && (enc == "libx264" || enc == "libx265") {
+		if s.Video.Level != "" && s.Video.Level != "auto" && lib.SupportsLevel {
 			args = append(args, "-level", s.Video.Level)
 		}
 		if s.Video.GOP > 0 {
@@ -395,6 +473,80 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 		args = append(args, output)
 	}
 	return args, nil
+}
+
+// speedArgs maps the shared speed words onto whichever preset scale the chosen
+// library actually understands.
+func speedArgs(v VideoSpec, lib encoderLib, enc string) []string {
+	if !lib.SupportsSpeed {
+		return nil
+	}
+	speed := orDefault(v.Speed, "medium")
+	switch lib.engine {
+	case "software":
+		switch enc {
+		case "libx264", "libx265":
+			return []string{"-preset", speed}
+		case "libsvtav1":
+			return []string{"-preset", orDefault(av1Presets[speed], "7")}
+		case "libvpx-vp9":
+			return []string{"-cpu-used", orDefault(vp9CPUUsed[speed], "3"),
+				"-row-mt", "1", "-deadline", "good"}
+		}
+	case "nvenc":
+		return []string{"-preset", orDefault(nvencPresets[speed], "p5")}
+	case "qsv":
+		return []string{"-preset", orDefault(qsvPresets[speed], "medium")}
+	case "amf":
+		return []string{"-quality", amfQuality(speed)}
+	}
+	return nil
+}
+
+func amfQuality(speed string) string {
+	switch speed {
+	case "ultrafast", "veryfast", "faster", "fast":
+		return "speed"
+	case "medium":
+		return "balanced"
+	}
+	return "quality"
+}
+
+// qualityArgs renders constant-quality (or constant-quantiser) rate control.
+// Every library spells it differently, and VideoToolbox even counts quality the
+// other way round — the caller's number always means "lower is better".
+func qualityArgs(v VideoSpec, lib encoderLib, enc string) []string {
+	if lib.Kind == "gpu" {
+		q := int(math.Round(v.Quality))
+		if lib.QualityInverted {
+			q = int(math.Round(lib.QualityMax)) - q
+		}
+		if q < 0 {
+			q = 0
+		}
+		s := strconv.Itoa(q)
+		switch lib.engine {
+		case "nvenc":
+			// CQ alone: without an explicit bitrate NVENC would otherwise
+			// fall back to its default 2 Mbit/s target.
+			return []string{"-rc", "vbr", "-cq", s, "-b:v", "0"}
+		case "qsv":
+			return []string{"-global_quality", s}
+		case "vaapi":
+			return []string{"-rc_mode", "CQP", "-qp", s}
+		case "videotoolbox":
+			return []string{"-q:v", s}
+		case "amf":
+			return []string{"-rc", "cqp", "-qp_i", s, "-qp_p", s}
+		}
+	}
+
+	q := trimFloat(math.Round(v.Quality*10) / 10)
+	if enc == "libvpx-vp9" {
+		return []string{"-crf", q, "-b:v", "0"}
+	}
+	return []string{"-crf", q}
 }
 
 var encoderParamFlag = map[string]string{

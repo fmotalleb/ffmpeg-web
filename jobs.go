@@ -190,7 +190,7 @@ func (m *Manager) newID(prefix string) string {
 func (m *Manager) Add(spec Spec, source, output, label, batchID string, duration, sourceSize float64) *Job {
 	m.mu.Lock()
 	passes := 1
-	if spec.Video.TwoPass && spec.Video.RateMode == "bitrate" && spec.Video.Encoder != "copy" {
+	if twoPassWanted(spec) {
 		passes = 2
 	}
 	job := &Job{
@@ -400,7 +400,7 @@ func (m *Manager) UpdateJob(id string, spec Spec, output string) error {
 	j.Spec = spec
 	j.Output = output
 	j.Passes = 1
-	if spec.Video.TwoPass && spec.Video.RateMode == "bitrate" && spec.Video.Encoder != "copy" {
+	if twoPassWanted(spec) {
 		j.Passes = 2
 	}
 	if resetProgress {

@@ -434,6 +434,51 @@ a.btn:hover {
 
 .hint { font-style: normal; color: var(--ink-dim); }
 
+/* ---------- encoder library picker ---------- */
+
+.library-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+}
+
+.library-kind {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.kind-tag {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.kind-tag.cpu { background: rgba(89, 191, 176, 0.16); color: var(--teal); }
+.kind-tag.gpu { background: rgba(224, 165, 86, 0.18); color: var(--amber); }
+
+.library-blurb { margin: 0; font-size: 12px; color: var(--ink-dim); max-width: 78ch; }
+
+.library-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+}
+.library-facts span + span::before { content: "\00b7"; margin-right: 10px; color: var(--line); }
+
 .note {
   margin: 12px 0 0;
   font-size: 12.5px;
@@ -474,6 +519,114 @@ a.btn:hover {
   font-size: 11.5px;
   color: var(--ink-dim);
 }
+
+/* ---------- trim range (two handles) ---------- */
+
+.trim-range { margin-top: 12px; max-width: 720px; }
+
+.dual-range { position: relative; height: 30px; }
+
+.dual-track,
+.dual-fill {
+  position: absolute;
+  top: 50%;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.dual-track { left: 0; right: 0; background: var(--line); }
+.dual-fill { background: var(--teal-deep); }
+
+/* Two range inputs stacked on one track: the inputs themselves ignore the
+   pointer so only their thumbs stay draggable. */
+.dual-range input[type="range"].dual-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: none;
+  cursor: pointer;
+}
+.dual-range input[type="range"].dual-input::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+.dual-range input[type="range"].dual-input::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+.dual-range input[type="range"].dual-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.dual-range input[type="range"].dual-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 2px solid var(--bg);
+}
+
+.trim-tip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  z-index: 8;
+  pointer-events: none;
+}
+.trim-tip img { display: block; width: 200px; border-radius: 3px; background: #05070a; }
+.trim-tip span {
+  display: block;
+  padding-top: 3px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--teal);
+}
+
+.trim-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+
+.trim-frames { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+.trim-frames figure { margin: 0; }
+.trim-frames img,
+.trim-frame-empty {
+  display: block;
+  width: 220px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: #05070a;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.trim-frames figcaption { padding-top: 3px; font-size: 11.5px; color: var(--ink-dim); }
+.trim-hint { flex: 1; align-self: end; margin: 0; font-size: 12px; color: var(--ink-dim); }
 
 /* ---------- recap ---------- */
 
@@ -530,6 +683,12 @@ a.btn:hover {
   border-bottom: 1px solid var(--line-soft);
 }
 .queue-head h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+
+.queue-toggle { display: inline-flex; align-items: center; gap: 5px; }
+.queue-toggle svg { margin-right: 0; }
+.queue-chevron { display: inline-flex; transition: transform 120ms ease; }
+.queue-chevron.is-collapsed { transform: rotate(180deg); }
+.queue.collapsed { max-height: none; }
 
 .queue-badge {
   font-family: var(--mono);

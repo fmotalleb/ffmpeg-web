@@ -14,6 +14,7 @@ export interface Spec {
 
 export interface VideoSpec {
   encoder: string;
+  library: string;
   rateMode: string;
   quality: number;
   bitrate: number;
@@ -147,6 +148,36 @@ export interface Job {
   queued: string;
   started: string;
   ended: string;
+}
+
+export interface EncoderLibrary {
+  id: string;
+  codec: string;
+  name: string;
+  ffmpeg: string;
+  kind: "cpu" | "gpu";
+  vendor?: string;
+  note: string;
+  qualityMax: number;
+  qualityGood: number;
+  qualityInverted?: boolean;
+  supportsSpeed: boolean;
+  supportsTune: boolean;
+  supportsLevel: boolean;
+  supportsTwoPass: boolean;
+  available: boolean;
+  unavailableReason?: string;
+}
+
+export interface EncoderKind {
+  id: "cpu" | "gpu";
+  label: string;
+  blurb: string;
+}
+
+export interface EncoderCatalog {
+  kinds: EncoderKind[];
+  libraries: EncoderLibrary[];
 }
 
 export interface QueueSettings {

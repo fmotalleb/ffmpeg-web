@@ -20,7 +20,7 @@ export function JobRow({ job }: { job: Job }) {
   const threshold = queueSettings?.shrinkThreshold || 20;
 
   const handlePreview = async () => {
-    useStore.setState({ previewJobId: job.id });
+    useStore.getState().setPreviewJobId(job.id);
     setActiveTab("preview");
   };
 

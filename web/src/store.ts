@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type {
+  EncoderCatalog,
   Hook,
   Job,
   MediaInfo,
@@ -7,6 +8,7 @@ import type {
   QueueSettings,
   Spec,
 } from "./types";
+import { codecForEncoder } from "./utils";
 
 function defaultSettings(): Spec {
   return {
@@ -16,6 +18,7 @@ function defaultSettings(): Spec {
     webOptimize: true,
     video: {
       encoder: "x264",
+      library: "sw",
       rateMode: "quality",
       quality: 22,
       bitrate: 4000,
@@ -115,6 +118,8 @@ export interface AppState {
   probeUrl: string;
   railCollapsed: boolean;
   queueSettingsOpen: boolean;
+  queueCollapsed: boolean;
+  encoders: EncoderCatalog;
 
   setSource: (info: MediaInfo) => void;
   setSettings: (s: Partial<Spec>) => void;
@@ -145,6 +150,8 @@ export interface AppState {
   setProbe: (open: boolean, title?: string, url?: string) => void;
   setRailCollapsed: (c: boolean) => void;
   setQueueSettingsOpen: (o: boolean) => void;
+  setQueueCollapsed: (c: boolean) => void;
+  setEncoders: (c: EncoderCatalog) => void;
   fitToSource: () => void;
 }
 
@@ -186,6 +193,8 @@ export const useStore = create<AppState>((set, _get) => ({
   probeUrl: "",
   railCollapsed: false,
   queueSettingsOpen: false,
+  queueCollapsed: false,
+  encoders: { kinds: [], libraries: [] },
 
   setSource: (info) =>
     set((s) => {
@@ -194,10 +203,19 @@ export const useStore = create<AppState>((set, _get) => ({
       if (!settings.outputName) {
         settings.outputName = info.name.replace(/\.[^.]+$/, "");
       }
-      settings.trim.end = info.duration;
+      // A different file means different timings: the trim range goes back to
+      // the whole clip and the preview timeline starts over, so neither keeps
+      // pointing at a moment the new file may not even have.
+      settings.trim = { ...settings.trim, start: 0, end: info.duration };
       settings.audio.track = info.audio.length ? info.audio[0].index : 0;
       settings.subtitle.track = info.subtitles.length ? info.subtitles[0].index : 0;
-      return { source: info, settings, previewJobId: null, ...previewReset };
+      return {
+        source: info,
+        settings,
+        previewJobId: null,
+        previewTime: 0,
+        ...previewReset,
+      };
     }),
 
   setSettings: (partial) =>
@@ -222,7 +240,12 @@ export const useStore = create<AppState>((set, _get) => ({
 
   setActiveTab: (tab) => set({ activeTab: tab }),
   setEditingJobId: (id) => set({ editingJobId: id }),
-  setPreviewJobId: (id) => set({ previewJobId: id }),
+  setPreviewJobId: (id) =>
+    set((s) => ({
+      previewJobId: id,
+      // A different job is a different timeline.
+      previewTime: id === s.previewJobId ? s.previewTime : 0,
+    })),
   setPresets: (p) => set({ presets: p }),
 
   applyPreset: (preset) =>
@@ -291,6 +314,26 @@ export const useStore = create<AppState>((set, _get) => ({
     set({ probeOpen: open, probeTitle: title, probeUrl: url }),
   setRailCollapsed: (c) => set({ railCollapsed: c }),
   setQueueSettingsOpen: (o) => set({ queueSettingsOpen: o }),
+  setQueueCollapsed: (c) => set({ queueCollapsed: c }),
+  setEncoders: (c) =>
+    set((s) => {
+      // Keep the chosen library valid: if the current pick is missing from the
+      // catalog that came back (an old spec, or a codec that changed), fall
+      // back to the software entry so the select always shows something.
+      const codec = codecForEncoder[s.settings.video.encoder];
+      const libs = c.libraries.filter((l) => l.codec === codec);
+      if (!libs.some((l) => l.id === s.settings.video.library)) {
+        const fallback = libs.find((l) => l.kind === "cpu")?.id ?? libs[0]?.id ?? "sw";
+        return {
+          encoders: c,
+          settings: {
+            ...s.settings,
+            video: { ...s.settings.video, library: fallback },
+          },
+        };
+      }
+      return { encoders: c };
+    }),
 
   fitToSource: () =>
     set((s) => {
