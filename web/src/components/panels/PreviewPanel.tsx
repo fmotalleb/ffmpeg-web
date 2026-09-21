@@ -622,8 +622,8 @@ export function PreviewPanel() {
           />
         </label>
       </div>
-      <div className="preview-quicklinks">
-        <button className="btn btn-small btn-quiet" onClick={() => stepFrame(-1)}>
+      <div className="toolbar">
+        <button className="btn btn-quiet" onClick={() => stepFrame(-1)}>
           {"\u27e8"} Frame
         </button>
         <label className="field time-field">
@@ -639,23 +639,23 @@ export function PreviewPanel() {
             placeholder="0:00.00"
           />
         </label>
-        <button className="btn btn-small btn-quiet" onClick={() => stepFrame(1)}>
+        <button className="btn btn-quiet" onClick={() => stepFrame(1)}>
           Frame {"\u27e9"}
         </button>
         <button
-          className="btn btn-small btn-quiet"
+          className="btn btn-quiet"
           onClick={() => useStore.getState().setPreviewTime(settings.trim.start || 0)}
         >
           Trim start
         </button>
         <button
-          className="btn btn-small btn-quiet"
+          className="btn btn-quiet"
           onClick={() => useStore.getState().setPreviewTime(subjectMeta.duration / 2 || 0)}
         >
           Middle
         </button>
         <button
-          className="btn btn-small btn-quiet"
+          className="btn btn-quiet"
           onClick={() => {
             const t = settings.trim.enabled && settings.trim.end > 0 ? settings.trim.end : subjectMeta.duration;
             useStore.getState().setPreviewTime(t);
@@ -676,12 +676,12 @@ export function PreviewPanel() {
             <option value={2}>2s</option>
           </select>
         </label>
-        <button className="btn btn-small" onClick={loadDiffFrames}>
+        <button className="btn" onClick={loadDiffFrames}>
           Refresh frames
         </button>
       </div>
 
-      <div className="diff-toolbar">
+      <div className="toolbar">
         <div className="segmented" role="group" aria-label="Comparison mode">
           {(["split", "side-by-side", "overlay", "difference", "flicker"] as const).map((mode) => (
             <button
@@ -694,16 +694,16 @@ export function PreviewPanel() {
           ))}
         </div>
         <button
-          className="btn btn-small"
+          className="btn btn-quiet"
           onClick={() => useStore.setState((s) => ({ diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget } }))}
           title="Swap source/target (S)"
         >
           Swap
         </button>
-        <button className="btn btn-small" onClick={togglePlay}>
+        <button className="btn" onClick={togglePlay}>
           {diff.playing ? "\u23f8 Pause" : "\u25b6 Play"}
         </button>
-        <label className="field" id="diff-sync-field">
+        <label className="field sync-field">
           <span>
             Sync offset <em className="hint">{diff.syncOffset}ms</em>
           </span>
@@ -736,7 +736,7 @@ export function PreviewPanel() {
           </span>
         )}
         <button
-          className="btn btn-small btn-quiet"
+          className="btn btn-quiet"
           onClick={() => {
             const target = diff.mode === "side-by-side"
               ? document.querySelector(".diff-sbs")
@@ -890,7 +890,7 @@ export function PreviewPanel() {
       </div>
 
       <h3 className="group-title">Screenlist Generator</h3>
-      <div className="thumb-toolbar">
+      <div className="toolbar thumb-toolbar">
         <div className="segmented" role="group" aria-label="Frame source">
           <button
             className={`seg${useStore.getState().thumbSourceMode === "source" ? " is-active" : ""}`}
@@ -917,12 +917,12 @@ export function PreviewPanel() {
           <span>Size (px)</span>
           <input type="number" min={80} max={640} step={20} value={thumbScale} onChange={(e) => setThumbScale(Number(e.target.value))} />
         </label>
-        <button className="btn btn-small" onClick={generateScreenlist} disabled={thumbGenerating || !subjectMeta.duration}>
+        <button className="btn" onClick={generateScreenlist} disabled={thumbGenerating || !subjectMeta.duration}>
           {thumbGenerating ? "Generating…" : "Generate"}
         </button>
         {thumbOutput && (
           <button
-            className="btn btn-small btn-quiet"
+            className="btn btn-quiet"
             onClick={() => { const a = document.createElement("a"); a.href = thumbOutput; a.download = "screenlist.png"; a.click(); }}
           >
             Download
