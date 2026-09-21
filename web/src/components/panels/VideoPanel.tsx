@@ -95,7 +95,7 @@ export function VideoPanel() {
                 <span>
                   Quality{" "}
                   <em className="hint">
-                    \u2014 {scale.good} is a good default for this encoder
+                    — {scale.good} is a good default for this encoder
                   </em>
                 </span>
                 <div className="slider-row">
