@@ -10,6 +10,7 @@ project_name: ffmpeg-web
 
 before:
   hooks:
+    - go generate ./...
     - go mod tidy
 
 builds:

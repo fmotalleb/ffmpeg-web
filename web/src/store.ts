@@ -148,6 +148,8 @@ export interface AppState {
   fitToSource: () => void;
 }
 
+const previewReset = { previewFrames: { time: 0, sourceURL: null, targetURL: null, targetIsFinal: false } };
+
 export const useStore = create<AppState>((set, _get) => ({
   config: { root: "", outDir: "", allowCommands: false },
   source: null,
@@ -195,13 +197,14 @@ export const useStore = create<AppState>((set, _get) => ({
       settings.trim.end = info.duration;
       settings.audio.track = info.audio.length ? info.audio[0].index : 0;
       settings.subtitle.track = info.subtitles.length ? info.subtitles[0].index : 0;
-      return { source: info, settings, previewJobId: null };
+      return { source: info, settings, previewJobId: null, ...previewReset };
     }),
 
   setSettings: (partial) =>
     set((s) => ({
       settings: { ...s.settings, ...partial } as Spec,
       presetId: null,
+      ...previewReset,
     })),
 
   updateSettings: (path, value) =>
@@ -214,7 +217,7 @@ export const useStore = create<AppState>((set, _get) => ({
         return o[k] as Record<string, unknown>;
       }, settings as unknown as Record<string, unknown>);
       target[last] = value;
-      return { settings, presetId: null };
+      return { settings, presetId: null, ...previewReset };
     }),
 
   setActiveTab: (tab) => set({ activeTab: tab }),
@@ -228,7 +231,7 @@ export const useStore = create<AppState>((set, _get) => ({
       settings.outputName = s.settings.outputName;
       settings.extra = s.settings.extra;
       settings.input = s.source ? s.source.path : "";
-      return { settings, presetId: preset.id };
+      return { settings, presetId: preset.id, ...previewReset };
     }),
 
   setConfig: (cfg) => set({ config: cfg }),
