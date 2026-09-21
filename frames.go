@@ -85,7 +85,7 @@ func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 		"-i", tmpPath,
 		"-vf", selectFilter,
 		"-frames:v", "1",
-		"-vsync", "0",
+		// "-vsync", "0",
 		"-q:v", "2",
 		"-strict", "-1",
 		"-f", "mjpeg", "pipe:1",
