@@ -198,6 +198,7 @@ export function PreviewPanel() {
   }, [previewJobId, source, previewTime]);
 
   // Load diff frames
+  const loadSeqRef = useRef(0);
   const loadDiffFrames = useCallback(async () => {
     const subject = currentPreviewSubject();
     if (!subject || !subject.duration) {
@@ -207,13 +208,16 @@ export function PreviewPanel() {
     const t = previewTime;
     const stage = diffStageRef.current;
     const width = Math.min(1280, Math.round(stage?.clientWidth || 960)) || 960;
+    const seq = ++loadSeqRef.current;
     try {
       const [sourceURL, targetURL] = await Promise.all([
         subject.sourceClip(t, width),
         subject.targetClip(t, width),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setPreviewFrames({ time: t, sourceURL, targetURL, targetIsFinal: subject.targetIsFinal });
     } catch (err: unknown) {
+      if (seq !== loadSeqRef.current) return;
       toast((err as Error).message);
     }
   }, [previewTime, previewJobId, source, diff.syncOffset, previewDur]);
@@ -346,17 +350,23 @@ export function PreviewPanel() {
         cy = e.clientY - rect.top;
       }
       lastLensPos.current = { x: cx, y: cy };
-      positionLens(cx, cy, rect);
+      positionLens(cx, cy, rect, magnifierShowsTargetRef.current, magnifierZoomRef.current);
     };
     const onWheel = (e: WheelEvent) => {
       if (!diff.magnifier) return;
       e.preventDefault();
-      setMagnifierZoom((z) => clampNum(z + (e.deltaY < 0 ? 0.4 : -0.4), 1.5, 8));
+      const z = magnifierZoomRef.current;
+      const next = clampNum(z + (e.deltaY < 0 ? 0.4 : -0.4), 1.5, 8);
+      setMagnifierZoom(next);
+      positionLens(lastLensPos.current.x, lastLensPos.current.y, stage.getBoundingClientRect(), magnifierShowsTargetRef.current, next);
     };
     const onClick = (e: MouseEvent) => {
       if (!diff.magnifier) return;
       if ((e.target as HTMLElement)?.closest(".diff-handle")) return;
-      setMagnifierShowsTarget((v) => !v);
+      const next = !magnifierShowsTargetRef.current;
+      setMagnifierShowsTarget(next);
+      const rect = stage.getBoundingClientRect();
+      positionLens(lastLensPos.current.x, lastLensPos.current.y, rect, next, magnifierZoomRef.current);
     };
     const onLeave = () => {
       if (lensRef.current) lensRef.current.hidden = true;
@@ -375,16 +385,15 @@ export function PreviewPanel() {
     };
   }, [diff.magnifier]);
 
-  const positionLens = (x: number, y: number, rect: DOMRect) => {
+  const positionLens = (x: number, y: number, rect: DOMRect, showsTarget: boolean, zoom: number) => {
     const lens = lensRef.current;
     if (!lens) return;
     const size = 190;
-    const zoom = magnifierZoom;
     lens.style.width = `${size}px`;
     lens.style.height = `${size}px`;
     lens.style.left = `${x - size / 2}px`;
     lens.style.top = `${y - size / 2}px`;
-    const activeEl = magnifierShowsTarget ? overlayVideoRef.current : baseVideoRef.current;
+    const activeEl = showsTarget ? overlayVideoRef.current : baseVideoRef.current;
     if (activeEl && activeEl.videoWidth) {
       const fc = document.createElement("canvas");
       fc.width = activeEl.videoWidth;
@@ -392,7 +401,7 @@ export function PreviewPanel() {
       fc.getContext("2d")!.drawImage(activeEl, 0, 0);
       lens.style.backgroundImage = `url(${fc.toDataURL()})`;
     } else {
-      const activeURL = magnifierShowsTarget ? previewFrames.targetURL : previewFrames.sourceURL;
+      const activeURL = showsTarget ? previewFrames.targetURL : previewFrames.sourceURL;
       lens.style.backgroundImage = activeURL ? `url(${activeURL})` : "none";
     }
     lens.style.backgroundSize = `${rect.width * zoom}px ${rect.height * zoom}px`;
@@ -598,7 +607,7 @@ export function PreviewPanel() {
         </label>
         {diff.magnifier && (
           <span className="diff-mag-label">
-            Viewing: {magnifierShowsTarget ? "Target" : "Source"}
+            Viewing: {magnifierShowsTarget ? "Result" : "Source"}
           </span>
         )}
         <button
@@ -701,7 +710,7 @@ export function PreviewPanel() {
           </figure>
           <figure>
             <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
-            <figcaption>Target</figcaption>
+            <figcaption>Result</figcaption>
           </figure>
         </div>
       )}
@@ -722,7 +731,7 @@ export function PreviewPanel() {
           className="btn btn-small btn-quiet"
           onClick={() => downloadURL(previewFrames.targetURL, `target-${frameFileStamp(previewFrames.time)}.jpg`)}
         >
-          Download target
+          Download result
         </button>
         {diff.mode === "difference" && (
           <button
@@ -754,7 +763,7 @@ export function PreviewPanel() {
             className={`seg${thumbSourceMode === "target" ? " is-active" : ""}`}
             onClick={() => setThumbSourceMode("target")}
           >
-            Target
+            Result
           </button>
         </div>
         <label className="field">
