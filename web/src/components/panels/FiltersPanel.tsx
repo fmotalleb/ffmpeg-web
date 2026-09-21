@@ -40,9 +40,9 @@ export function FiltersPanel() {
             }
           >
             <option value={0}>None</option>
-            <option value={90}>90\u00b0 clockwise</option>
-            <option value={180}>180\u00b0</option>
-            <option value={270}>90\u00b0 counter-clockwise</option>
+            <option value={90}>90{"\u00b0"} clockwise</option>
+            <option value={180}>180{"\u00b0"}</option>
+            <option value={270}>90{"\u00b0"} counter-clockwise</option>
           </select>
         </label>
         <label className="field check">
