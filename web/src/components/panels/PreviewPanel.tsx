@@ -530,7 +530,7 @@ export function PreviewPanel() {
       ctx.fillRect(0, 0, canvasW, canvasH);
 
       const isSource = thumbSourceMode === "source";
-      const times = Array.from({ length: count }, (_, i) => (i / (count - 1)) * dur);
+      const times = Array.from({ length: count }, (_, i) => (i / (count - 1)) * dur * 0.98);
 
       for (let i = 0; i < count; i++) {
         const t = times[i];
