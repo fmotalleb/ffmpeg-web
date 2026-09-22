@@ -18,6 +18,35 @@ const (
 	defaultClipDur = 0.5
 )
 
+// seekTimes gives the timestamps to try for one requested moment, starting at
+// the exact value and stepping back with growing gaps. A request for the very
+// end of a file — the trim end equal to the reported duration, the timeline
+// dragged all the way to the right, or a sync offset pushing a frame past the
+// end — lands behind the last frame, and ffmpeg then decodes nothing. Trying a
+// few earlier positions finds the frame that actually exists.
+func seekTimes(t float64) []float64 {
+	var out []float64
+	for i := 0; i < 7; i++ {
+		back := float64(uint64(1) << i) // 0, .05, .1, .2, .4, .8, 1.6s back
+		cand := math.Max(0, t-0.05*back)
+		if i > 0 && cand == out[len(out)-1] {
+			continue
+		}
+		out = append(out, cand)
+	}
+	return out
+}
+
+// evenWidth rounds a requested scale width down to an even number. The browser
+// hands over stage widths that are not guaranteed to be even, and both libx264
+// and mjpeg reject odd widths with "width not divisible by 2".
+func evenWidth(w int) int {
+	if w < 2 {
+		return 0
+	}
+	return w - w%2
+}
+
 // extractFrame grabs one JPEG frame straight from a file at the given time —
 // used for the untouched source, and for a finished job's actual output.
 func extractFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int) ([]byte, error) {
@@ -38,6 +67,22 @@ func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	width = evenWidth(width)
+	var lastErr error
+	for _, seek := range seekTimes(atSeconds) {
+		data, err := encodePreviewFrameAt(ctx, ffmpegBin, path, seek, width, spec, workDir)
+		if err == nil && len(data) > 0 {
+			return data, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no frame at that time — it may be past the end of the video")
+	}
+	return nil, lastErr
+}
+
+func encodePreviewFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, spec Spec, workDir string) ([]byte, error) {
 	tmp, err := os.CreateTemp(workDir, "preview-*.mp4")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create temp file: %w", err)
@@ -73,38 +118,18 @@ func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 		return nil, fmt.Errorf("preview encode failed: %s", msg)
 	}
 
-	// Extract the middle frame by frame number — exact alignment regardless
-	// of frame rate.
-	targetFrame := previewEncodeFrames / 2
-	selectFilter := "select=eq(n\\," + strconv.Itoa(targetFrame) + ")"
-	if width > 0 {
-		selectFilter += fmt.Sprintf(",scale=%d:-2:flags=lanczos", width)
+	// The requested moment sits about 0.5s into the encoded segment. Grabbing
+	// it by relative time rather than a fixed frame index keeps the frame
+	// found even when the segment is cut short by the end of the video.
+	rel := atSeconds - seekSpec.Trim.Start
+	frame, err := runFrameExtract(ctx, ffmpegBin, tmpPath, rel, width, "")
+	if err != nil {
+		return nil, err
 	}
-	frameArgs := []string{
-		"-hide_banner", "-nostdin", "-loglevel", "error",
-		"-i", tmpPath,
-		"-vf", selectFilter,
-		"-frames:v", "1",
-		// "-vsync", "0",
-		"-q:v", "2",
-		"-strict", "-1",
-		"-f", "mjpeg", "pipe:1",
-	}
-	frameCmd := execCMD(ctx, ffmpegBin, frameArgs...)
-	var frameOut, frameStderr bytes.Buffer
-	frameCmd.Stdout = &frameOut
-	frameCmd.Stderr = &frameStderr
-	if err := frameCmd.Run(); err != nil {
-		msg := strings.TrimSpace(frameStderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("could not read a frame: %s", msg)
-	}
-	if frameOut.Len() == 0 {
+	if len(frame) == 0 {
 		return nil, fmt.Errorf("no frame at that time — it may be past the end of the video")
 	}
-	return frameOut.Bytes(), nil
+	return frame, nil
 }
 
 func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, vf string) ([]byte, error) {
@@ -114,6 +139,22 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 	ctx, cancel := context.WithTimeout(ctx, frameTimeout)
 	defer cancel()
 
+	width = evenWidth(width)
+	var lastErr error
+	for _, seek := range seekTimes(atSeconds) {
+		data, err := extractFrameAt(ctx, ffmpegBin, path, seek, width, vf)
+		if err == nil && len(data) > 0 {
+			return data, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no frame at that time — it may be past the end of the video")
+	}
+	return nil, lastErr
+}
+
+func extractFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, vf string) ([]byte, error) {
 	// Seek in two steps: a fast, keyframe-aligned seek before -i gets close,
 	// then a short precise seek after -i lands on the exact frame without
 	// decoding the whole file from the start.
@@ -148,9 +189,6 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 		}
 		return nil, fmt.Errorf("could not read a frame: %s", msg)
 	}
-	if out.Len() == 0 {
-		return nil, fmt.Errorf("no frame at that time — it may be past the end of the video")
-	}
 	return out.Bytes(), nil
 }
 
@@ -159,10 +197,26 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 // extractClip cuts a short segment from a file starting at atSeconds,
 // copying streams without re-encoding. The result is an MP4 suitable for
 // inline browser playback.
-func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duration float64, width int) ([]byte, error) {
+func extractClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, width int) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 
+	width = evenWidth(width)
+	var lastErr error
+	for _, seek := range seekTimes(atSeconds) {
+		data, err := extractClipAt(ctx, ffmpegBin, ffprobeBin, path, seek, duration, width)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no clip data at that time")
+	}
+	return nil, lastErr
+}
+
+func extractClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, width int) ([]byte, error) {
 	tmp, err := os.CreateTemp("", "clip-*.mp4")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create temp file: %w", err)
@@ -194,20 +248,46 @@ func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duratio
 
 	data, err := os.ReadFile(tmpPath)
 	if err != nil {
-		return nil, fmt.Errorf("cannot read clip: %w", err)
+		return nil, err
 	}
-	if len(data) == 0 {
-		return nil, fmt.Errorf("no clip data at that time")
+	if !clipHasVideo(ctx, ffprobeBin, tmpPath) {
+		return nil, fmt.Errorf("the clip has no footage to cut")
 	}
 	return data, nil
 }
 
+// clipHasVideo confirms the extracted file really holds a playable video
+// track. ffmpeg can exit cleanly yet write an empty container when a seek
+// lands past the end of the source, and a header-only MP4 would play back as
+// a broken preview.
+func clipHasVideo(ctx context.Context, ffprobeBin, path string) bool {
+	cmd := execCMD(ctx, ffprobeBin, "-v", "error",
+		"-select_streams", "v", "-show_entries", "stream=codec_type", "-of", "csv=p=0", path)
+	out, err := cmd.CombinedOutput()
+	return err == nil && bytes.Contains(out, []byte("video"))
+}
+
 // encodePreviewClip encodes a short segment around atSeconds using the
 // full spec (codec, bitrate, quality, filters) into an MP4 clip.
-func encodePreviewClip(ctx context.Context, ffmpegBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
+func encodePreviewClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 
+	var lastErr error
+	for _, seek := range seekTimes(atSeconds) {
+		data, err := encodePreviewClipAt(ctx, ffmpegBin, ffprobeBin, path, seek, duration, spec, workDir)
+		if err == nil {
+			return data, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no clip data at that time")
+	}
+	return nil, lastErr
+}
+
+func encodePreviewClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
 	tmp, err := os.CreateTemp(workDir, "preview-clip-*.mp4")
 	if err != nil {
 		return nil, fmt.Errorf("cannot create temp file: %w", err)
@@ -237,11 +317,10 @@ func encodePreviewClip(ctx context.Context, ffmpegBin, path string, atSeconds, d
 		return nil, fmt.Errorf("preview clip encode failed: %s", msg)
 	}
 
-	data, err := os.ReadFile(tmpPath)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read preview clip: %w", err)
+	if !clipHasVideo(ctx, ffprobeBin, tmpPath) {
+		return nil, fmt.Errorf("the preview clip has no footage to cut")
 	}
-	return data, nil
+	return os.ReadFile(tmpPath)
 }
 
 // ---- frame cache ----

@@ -122,6 +122,21 @@ func probe(ctx context.Context, ffprobeBin, path string) (*MediaInfo, error) {
 				PixelFormat: st.PixFmt,
 				Interlaced:  st.FieldOrder != "" && st.FieldOrder != "progressive",
 			}
+			// The timeline is for seeking and trimming video frames, so it has
+			// to end where the video actually ends. Containers often report a
+			// format duration that runs past the last video frame (trailing
+			// audio, a longer ending track), and any time inside that tail has
+			// no frame to show — ffmpeg answers with nothing. Prefer the video
+			// stream's own duration, falling back to its frame count.
+			if d, err := strconv.ParseFloat(st.Duration, 64); err == nil && d > 0 {
+				info.Duration = d
+			} else if st.NBFrames != "" {
+				if n, err := strconv.ParseFloat(st.NBFrames, 64); err == nil && n > 0 {
+					if fr := parseRate(st.AvgFrameRate, st.RFrameRate); fr > 0 {
+						info.Duration = n / fr
+					}
+				}
+			}
 		case "audio":
 			info.Audio = append(info.Audio, Track{
 				Index: audioN, Codec: st.CodecName, Language: tags["language"],
@@ -137,13 +152,8 @@ func probe(ctx context.Context, ffprobeBin, path string) (*MediaInfo, error) {
 			subN++
 		}
 	}
-	if info.Duration == 0 && info.Video != nil {
-		for _, st := range raw.Streams {
-			if st.CodecType == "video" {
-				info.Duration, _ = strconv.ParseFloat(st.Duration, 64)
-				break
-			}
-		}
+	if info.Duration <= 0 {
+		info.Duration, _ = strconv.ParseFloat(raw.Format.Duration, 64)
 	}
 	return info, nil
 }

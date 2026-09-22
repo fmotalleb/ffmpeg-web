@@ -793,8 +793,13 @@ func (m *Manager) readProgress(job *Job, r io.Reader) {
 				job.Progress = clamp(secs/total, 0, 1)
 				if job.Speed > 0 {
 					job.ETA = (total - secs) / job.Speed
-				} // Project the finished size from what has been written so far.
-				if job.Progress > 0.01 && job.OutSize > 0 && job.Pass != 1 {
+				}
+				// Project the finished size from what has been written so far.
+				// The analysis pass of a two-pass encode writes no real video,
+				// so only skip that one; single-pass jobs exist with Pass == 1
+				// and are the common case, so they must still get an estimate.
+				analysisPass := job.Passes > 1 && job.Pass == 1
+				if job.Progress > 0.01 && job.OutSize > 0 && !analysisPass {
 					job.EstimatedSize = int64(float64(job.OutSize) / job.Progress)
 					if job.SourceSize > 0 {
 						job.SavedPct = (1 - float64(job.EstimatedSize)/float64(job.SourceSize)) * 100
