@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Transcoder logo: the film-strip brand mark from the top bar -->
+  <defs>
+    <clipPath id="strip">
+      <rect x="8" y="3" width="16" height="26" rx="2.5" />
+    </clipPath>
+  </defs>
+  <rect x="8" y="3" width="16" height="26" rx="2.5" fill="#2a3542" />
+  <g clip-path="url(#strip)" fill="#59bfb0">
+    <!-- left edge, teal 3.5 / gap 3.5 repeating from the top -->
+    <rect x="8" y="3" width="3.5" height="3.5" />
+    <rect x="8" y="10" width="3.5" height="3.5" />
+    <rect x="8" y="17" width="3.5" height="3.5" />
+    <rect x="8" y="24" width="3.5" height="3.5" />
+    <!-- right edge -->
+    <rect x="20.5" y="3" width="3.5" height="3.5" />
+    <rect x="20.5" y="10" width="3.5" height="3.5" />
+    <rect x="20.5" y="17" width="3.5" height="3.5" />
+    <rect x="20.5" y="24" width="3.5" height="3.5" />
+  </g>
+</svg>
