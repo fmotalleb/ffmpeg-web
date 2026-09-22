@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useStore } from "../store";
 import { api, toast } from "../api";
+import { HardwareStatus } from "./HardwareStatus";
 import type { MediaInfo } from "../types";
 
 export function TopBar() {
@@ -65,6 +66,7 @@ export function TopBar() {
             onChange={handleUpload}
           />
           <span className="spacer" />
+          <HardwareStatus />
           <button
             className="btn btn-primary"
             disabled={!source}

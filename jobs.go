@@ -61,6 +61,11 @@ type Job struct {
 
 	cancel context.CancelFunc
 	logBuf []string
+
+	// ffmpegPID is the process this job is encoding with, set while it runs and
+	// cleared when it stops. It is not serialized: the PID belongs to this run of
+	// the server, and the queue file is read back after a restart.
+	ffmpegPID int
 }
 
 func (j *Job) clone() Job {
@@ -216,6 +221,22 @@ func (m *Manager) nudge() {
 }
 
 func (m *Manager) List() []Job { return m.Snapshot().Jobs }
+
+// ffmpegPIDs is the encode process of every running job, keyed by job id. The
+// system report reads these PIDs out of the process table directly, which is
+// how a job row can show its own ffmpeg rather than whichever ffmpeg happens to
+// be running on the machine.
+func (m *Manager) ffmpegPIDs() map[string]int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := map[string]int{}
+	for id, j := range m.jobs {
+		if j.Status == StatusRunning && j.ffmpegPID != 0 {
+			out[id] = j.ffmpegPID
+		}
+	}
+	return out
+}
 
 func (m *Manager) Get(id string) (Job, bool) {
 	m.mu.RLock()
@@ -617,6 +638,7 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 
 	m.mu.Lock()
 	job.cancel = nil
+	job.ffmpegPID = 0
 	job.Ended = time.Now()
 	job.ETA = 0
 	switch {
@@ -715,6 +737,9 @@ func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("could not start ffmpeg: %w", err)
 	}
+	m.mu.Lock()
+	job.ffmpegPID = cmd.Process.Pid
+	m.mu.Unlock()
 
 	var wg sync.WaitGroup
 	wg.Add(2)

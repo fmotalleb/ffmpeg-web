@@ -49,6 +49,7 @@ type server struct {
 	store     *Store
 	presets   *presetStore
 	frames    *frameCache
+	monitor   *systemMonitor
 	maxUpload int64
 	allowCmds bool
 }
@@ -105,6 +106,7 @@ func main() {
 		mediaRoot: mediaRoot, outDir: outDir, uploadDir: uploadDir, workDir: workDir,
 		ffmpeg: *ffmpegBin, ffprobe: *ffprobeBin,
 		broker: broker, jobs: manager, store: store, presets: presetStore, frames: newFrameCache(256 << 20),
+		monitor:   newSystemMonitor(),
 		maxUpload: *maxUpload, allowCmds: *allowCmds,
 	}
 
@@ -161,6 +163,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /api/presets", s.handleSavePreset)
 	mux.HandleFunc("DELETE /api/presets/{name}", s.handleDeletePreset)
 	mux.HandleFunc("GET /api/encoders", s.handleEncoders)
+	mux.HandleFunc("GET /api/system", s.handleSystem)
 
 	mux.HandleFunc("GET /api/jobs", s.handleListJobs)
 	mux.HandleFunc("POST /api/jobs", s.handleCreateJob)
