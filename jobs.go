@@ -36,19 +36,18 @@ type Job struct {
 	Output  string    `json:"output"`
 	Status  JobStatus `json:"status"`
 
-	Progress      float64 `json:"progress"` // 0..1
-	Pass          int     `json:"pass"`
-	Passes        int     `json:"passes"`
-	FPS           float64 `json:"fps"`
-	Speed         float64 `json:"speed"` // realtime multiplier
-	Bitrate       string  `json:"bitrate"`
-	Frame         int64   `json:"frame"`
-	OutSize       int64   `json:"outSize"`
-	EstimatedSize int64   `json:"estimatedSize"`
-	SourceSize    int64   `json:"sourceSize"`
-	SavedPct      float64 `json:"savedPct"` // how much smaller the result is
-	ETA           float64 `json:"eta"`      // seconds left, -1 when unknown
-	Duration      float64 `json:"duration"`
+	Progress   float64 `json:"progress"` // 0..1
+	Pass       int     `json:"pass"`
+	Passes     int     `json:"passes"`
+	FPS        float64 `json:"fps"`
+	Speed      float64 `json:"speed"` // realtime multiplier
+	Bitrate    string  `json:"bitrate"`
+	Frame      int64   `json:"frame"`
+	OutSize    int64   `json:"outSize"`
+	SourceSize int64   `json:"sourceSize"`
+	SavedPct   float64 `json:"savedPct"` // how much smaller the result is
+	ETA        float64 `json:"eta"`      // seconds left, -1 when unknown
+	Duration   float64 `json:"duration"`
 
 	Verified      bool   `json:"verified"`
 	VerifyNote    string `json:"verifyNote,omitempty"`
@@ -123,7 +122,6 @@ func (m *Manager) Restore(snap Snapshot) (recovered int) {
 			job.Progress = 0
 			job.Pass = 0
 			job.OutSize = 0
-			job.EstimatedSize = 0
 			job.ETA = -1
 			job.Started = time.Time{}
 			job.Error = ""
@@ -362,7 +360,7 @@ func (m *Manager) Retry(id string) error {
 		_ = os.Remove(j.Output)
 	}
 	j.Status = StatusQueued
-	j.Progress, j.Pass, j.OutSize, j.EstimatedSize, j.SavedPct = 0, 0, 0, 0, 0
+	j.Progress, j.Pass, j.OutSize, j.SavedPct = 0, 0, 0, 0
 	j.Error, j.VerifyNote, j.Verified = "", "", false
 	j.ETA = -1
 	j.Started, j.Ended = time.Time{}, time.Time{}
@@ -405,7 +403,7 @@ func (m *Manager) UpdateJob(id string, spec Spec, output string) error {
 	}
 	if resetProgress {
 		j.Status = StatusQueued
-		j.Progress, j.Pass, j.OutSize, j.EstimatedSize, j.SavedPct = 0, 0, 0, 0, 0
+		j.Progress, j.Pass, j.OutSize, j.SavedPct = 0, 0, 0, 0
 		j.Error, j.VerifyNote, j.Verified = "", "", false
 		j.ETA = -1
 		j.Started, j.Ended = time.Time{}, time.Time{}
@@ -633,7 +631,6 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 		job.Progress = 1
 		if st, err := os.Stat(job.Output); err == nil {
 			job.OutSize = st.Size()
-			job.EstimatedSize = st.Size()
 			if job.SourceSize > 0 {
 				job.SavedPct = (1 - float64(st.Size())/float64(job.SourceSize)) * 100
 			}
@@ -793,17 +790,6 @@ func (m *Manager) readProgress(job *Job, r io.Reader) {
 				job.Progress = clamp(secs/total, 0, 1)
 				if job.Speed > 0 {
 					job.ETA = (total - secs) / job.Speed
-				}
-				// Project the finished size from what has been written so far.
-				// The analysis pass of a two-pass encode writes no real video,
-				// so only skip that one; single-pass jobs exist with Pass == 1
-				// and are the common case, so they must still get an estimate.
-				analysisPass := job.Passes > 1 && job.Pass == 1
-				if job.Progress > 0.01 && job.OutSize > 0 && !analysisPass {
-					job.EstimatedSize = int64(float64(job.OutSize) / job.Progress)
-					if job.SourceSize > 0 {
-						job.SavedPct = (1 - float64(job.EstimatedSize)/float64(job.SourceSize)) * 100
-					}
 				}
 			}
 		case "progress":
