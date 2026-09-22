@@ -70,16 +70,9 @@ func decodeTail(ctx context.Context, ffmpegBin, path string, duration float64) e
 		if msg == "" {
 			msg = err.Error()
 		}
-		return fmt.Errorf("the end of the file does not decode: %s", firstLine(msg))
+		return fmt.Errorf("the end of the file does not decode: %s", msg)
 	}
 	return nil
-}
-
-func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
 }
 
 func formatSeconds(s float64) string {
