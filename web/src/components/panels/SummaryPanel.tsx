@@ -1,12 +1,7 @@
 import { useStore } from "../../store";
 import { TrimRange } from "../TrimRange";
-import {
-  codecForEncoder,
-  encoderNames,
-  formatDuration,
-  librariesForCodec,
-  parseTimecode,
-} from "../../utils";
+import { recap } from "../../recap";
+import { codecForEncoder, librariesForCodec, parseTimecode } from "../../utils";
 
 function outputDimensions(
   source: ReturnType<typeof useStore.getState>["source"],
@@ -33,16 +28,6 @@ function outputDimensions(
   return { w: w - (w % 2), h: h - (h % 2) };
 }
 
-function encodedSeconds(
-  source: ReturnType<typeof useStore.getState>["source"],
-  settings: ReturnType<typeof useStore.getState>["settings"],
-) {
-  if (!source) return 0;
-  const trim = settings.trim;
-  if (trim.enabled && trim.end > trim.start) return trim.end - trim.start;
-  return source.duration;
-}
-
 export function SummaryPanel() {
   const source = useStore((s) => s.source);
   const settings = useStore((s) => s.settings);
@@ -51,47 +36,11 @@ export function SummaryPanel() {
 
   const dims = outputDimensions(source, settings);
   const s = settings;
-  const names = encoderNames;
   const library = librariesForCodec(
     encoders,
     codecForEncoder[s.video.encoder] || "",
   ).find((l) => l.id === s.video.library);
-  const rows: [string, string][] = [
-    ["Source", source ? source.name : "nothing chosen yet"],
-    [
-      "Video",
-      s.video.encoder === "copy"
-        ? "copied as-is"
-        : `${names[s.video.encoder] || s.video.encoder} \u00b7 ${
-            s.video.rateMode === "quality"
-              ? `quality ${s.video.quality}`
-              : `${s.video.bitrate} kbit/s${s.video.twoPass ? " \u00b7 two passes" : ""}`
-          } \u00b7 ${s.video.speed}${library ? ` \u00b7 ${library.name}` : ""}`,
-    ],
-    ["Picture", dims ? `${dims.w}\u00d7${dims.h}` : "\u2014"],
-    [
-      "Audio",
-      s.audio.encoder === "none"
-        ? "removed"
-        : s.audio.encoder === "copy"
-          ? "copied as-is"
-          : `${s.audio.encoder.toUpperCase()} ${s.audio.bitrate} kbit/s \u00b7 ${s.audio.mixdown}`,
-    ],
-    [
-      "Subtitles",
-      ({ none: "left out", copy: "kept as a track", burn: "burned in" } as Record<string, string>)[
-        s.subtitle.mode
-      ] || s.subtitle.mode,
-    ],
-    ["Length", formatDuration(encodedSeconds(source, settings))],
-    [
-      "Writes",
-      `${s.outputName || (source ? source.name.replace(/\.[^.]+$/, "") : "output")}.${s.container}`,
-    ],
-  ];
-
-  const extras = [s.extra.encoderOptions, s.extra.inputArgs, s.extra.outputArgs].filter(Boolean);
-  if (extras.length) rows.push(["Extra options", extras.join("  ")]);
+  const rows = recap(source, s, dims, library?.name);
 
   return (
     <section className="panel is-active">
@@ -170,12 +119,30 @@ export function SummaryPanel() {
       </p>
       <TrimRange />
 
-      <h3 className="group-title">What will happen</h3>
+      <h3 className="group-title">What changes</h3>
       <dl className="recap">
-        {rows.map(([term, value]) => (
-          <span key={term} style={{ display: "contents" }}>
-            <dt>{term}</dt>
-            <dd>{value}</dd>
+        {rows.map((row) => (
+          <span key={row.term} style={{ display: "contents" }}>
+            <dt>{row.term}</dt>
+            <dd>
+              {row.was === undefined ? (
+                row.becomes
+              ) : row.becomes === undefined ? (
+                <>
+                  <span className="recap-was">{row.was}</span>
+                  <span className="recap-tag is-same">unchanged</span>
+                </>
+              ) : (
+                <>
+                  <span className="recap-was">{row.was}</span>
+                  <span className="recap-arrow" aria-hidden="true">
+                    &rarr;
+                  </span>
+                  <span className="recap-now">{row.becomes}</span>
+                  {row.kind && <span className="recap-tag">{row.kind}</span>}
+                </>
+              )}
+            </dd>
           </span>
         ))}
       </dl>

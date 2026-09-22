@@ -8,13 +8,14 @@ import type { FfmpegProcess, FfmpegUsage, SystemStatus } from "./types";
 // whatever happens to be on screen.
 export const POLL_MS = 3000;
 
-// Two minutes of CPU readings per job, for the sparkline in the job row.
+// Two minutes of readings per job, for the sparklines in the job row.
 const HISTORY_SAMPLES = 40;
 const HISTORY_JOBS = 24;
 
-// cpuHistory is keyed by job id rather than by pid: a two-pass encode stops and
-// starts ffmpeg between passes, and its curve should carry on across that.
-const cpuHistory = new Map<string, number[]>();
+// history is keyed by job id rather than by pid: a two-pass encode stops and
+// starts ffmpeg between passes, and its curves should carry on across that.
+type JobHistory = { cpu: number[]; rss: number[] };
+const history = new Map<string, JobHistory>();
 const noHistory: number[] = [];
 
 type Snapshot = { status: SystemStatus | null; error: string };
@@ -27,7 +28,7 @@ const listeners = new Set<Listener>();
 async function load() {
   try {
     const status = await api<SystemStatus>("/api/system");
-    recordCpu(status.ffmpegUsage);
+    record(status.ffmpegUsage);
     state = { status, error: "" };
   } catch (err) {
     state = { ...state, error: (err as Error).message };
@@ -35,22 +36,25 @@ async function load() {
   for (const listener of listeners) listener(state);
 }
 
-// recordCpu appends the CPU reading of every job-owned process to its history.
-// Processes with no rate yet are skipped rather than recorded as zero, which
-// would dip the curve at the start of each pass.
-function recordCpu(usage: FfmpegUsage) {
+// record appends the CPU and memory readings of every job-owned process to its
+// history. A process with no CPU rate yet is skipped rather than recorded as
+// zero, which would dip that curve at the start of each pass; its memory is
+// known from the first reading, so that one starts immediately.
+function record(usage: FfmpegUsage) {
   for (const proc of usage.processes) {
-    if (!proc.jobId || !proc.sampled) continue;
-    const history = cpuHistory.get(proc.jobId) ?? [];
-    cpuHistory.delete(proc.jobId);
-    cpuHistory.set(proc.jobId, [...history, proc.cpu].slice(-HISTORY_SAMPLES));
+    if (!proc.jobId) continue;
+    const job = history.get(proc.jobId) ?? { cpu: [], rss: [] };
+    if (proc.sampled) job.cpu = [...job.cpu, proc.cpu].slice(-HISTORY_SAMPLES);
+    job.rss = [...job.rss, proc.rss].slice(-HISTORY_SAMPLES);
+    history.delete(proc.jobId);
+    history.set(proc.jobId, job);
   }
   // Finished jobs are not dropped until their history ages out, so a long
-  // session cannot pile these up but a job between passes keeps its curve.
-  while (cpuHistory.size > HISTORY_JOBS) {
-    const oldest = cpuHistory.keys().next();
+  // session cannot pile these up but a job between passes keeps its curves.
+  while (history.size > HISTORY_JOBS) {
+    const oldest = history.keys().next();
     if (oldest.done) break;
-    cpuHistory.delete(oldest.value);
+    history.delete(oldest.value);
   }
 }
 
@@ -83,8 +87,10 @@ export function useSystemStatus(): Snapshot {
 export function useJobFfmpeg(jobId: string): Snapshot & {
   process: FfmpegProcess | null;
   cpu: number[];
+  rss: number[];
 } {
   const snapshot = useSystemStatus();
   const process = snapshot.status?.ffmpegUsage.processes.find((p) => p.jobId === jobId) ?? null;
-  return { ...snapshot, process, cpu: cpuHistory.get(jobId) ?? noHistory };
+  const job = history.get(jobId);
+  return { ...snapshot, process, cpu: job?.cpu ?? noHistory, rss: job?.rss ?? noHistory };
 }

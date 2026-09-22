@@ -181,7 +181,7 @@ function ProcessFacts({ proc, cpus }: { proc: FfmpegProcess | null; cpus: number
     return (
       <div className="hw-row hw-sub">
         <span>process</span>
-        <span className="hw-value">starting\u2026</span>
+        <span className="hw-value">starting&hellip;</span>
       </div>
     );
   }
@@ -190,7 +190,7 @@ function ProcessFacts({ proc, cpus }: { proc: FfmpegProcess | null; cpus: number
       <span>ffmpeg pid {proc.pid}</span>
       <span className="hw-value">
         {[
-          proc.sampled ? `${Math.round(proc.cpu)}% of a core` : "measuring cpu\u2026",
+          proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026",
           cpus > 1 && proc.sampled ? `${(proc.cpu / cpus).toFixed(1)}% of this machine` : "",
           formatBytes(proc.rss),
           `${proc.threads} threads`,
@@ -213,7 +213,7 @@ function EncoderSection({ status }: { status: SystemStatus | null }) {
             : "\u2014"}
         </span>
       </div>
-      {!status && <p className="hw-note">Checking what this ffmpeg build can use\u2026</p>}
+      {!status && <p className="hw-note">Checking what this ffmpeg build can use&hellip;</p>}
       {status?.encoders.map((encoder) => (
         <div
           className={`hw-item${encoder.available ? "" : " is-off"}`}
@@ -249,7 +249,7 @@ function DeviceSection({ status }: { status: SystemStatus | null }) {
       </div>
       {status && devices.length === 0 && (
         <p className="hw-note">
-          No graphics device reported here \u2014 encodes will run on the CPU.
+          No graphics device reported here &mdash; encodes will run on the CPU.
         </p>
       )}
       {devices.map((device) => (
@@ -308,7 +308,7 @@ function MachineSection({ status }: { status: SystemStatus | null }) {
 
       {!hasLoad && !hasMemory && (
         <p className="hw-note">
-          This platform does not report load or memory \u2014 only the encoders
+          This platform does not report load or memory &mdash; only the encoders
           and devices above are known.
         </p>
       )}

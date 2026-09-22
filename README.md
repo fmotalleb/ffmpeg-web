@@ -95,6 +95,18 @@ GET    /api/system              CPU, memory, GPUs, live ffmpeg usage, per job
 GET    /api/events             SSE: snapshot, job, queue
 ```
 
+## Deciding what changes
+
+The Summary tab ends with a recap of the encode written as "what the file is
+now, and what it will become": codec, rate control and frame rate, picture size
+and pixel format, filters, audio, subtitles, length, container. Lines the encode
+leaves alone are marked "unchanged" rather than left out, so it is as clear what
+will not be touched as what will, and each changed line carries a word for the
+change — `re-encoded`, `resized`, `trimmed`, `burned in`, `removed` and so on.
+Nothing is claimed without its "before": the picture line reads
+`1920×1080 → 1912×1076` rather than only the target. The rules live in
+`web/src/recap.ts`; the panel only renders them.
+
 ## Batch encoding
 
 Pick a folder instead of a file and every video under it is queued, with the
@@ -165,9 +177,11 @@ encoder and device parts are filled in.
 
 The queue's own encodes are reported against the job that started them. The
 manager remembers the PID of each ffmpeg it launches, so a running job row
-shows that process — its PID, CPU, memory and thread count — rather than
-averages over whatever else happens to be running on the machine; the same
-attribution labels the processes in the hardware popover.
+shows that process — its PID, CPU, memory and thread count, with a short live
+sparkline of both — rather than averages over whatever else happens to be
+running on the machine; the same attribution labels the processes in the
+hardware popover. The sparklines cover the last two minutes, and the CPU one is
+scaled to whole cores, so its dashed line is a single core.
 
 ## Frame inspector
 

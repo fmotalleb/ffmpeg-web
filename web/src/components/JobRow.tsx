@@ -213,7 +213,7 @@ export function JobRow({ job }: { job: Job }) {
 // started it, so this is that job's own process and not another ffmpeg that
 // happens to be running on the same machine.
 function JobFfmpeg({ jobId }: { jobId: string }) {
-  const { status, error, process: proc, cpu } = useJobFfmpeg(jobId);
+  const { status, error, process: proc, cpu, rss } = useJobFfmpeg(jobId);
 
   if (!proc) {
     // Before the platform reports the process, say why rather than showing a
@@ -235,43 +235,67 @@ function JobFfmpeg({ jobId }: { jobId: string }) {
     <div className="job-ffmpeg" title="The ffmpeg process this job is running">
       <span className="job-ffmpeg-label">ffmpeg</span>
       <span className="job-ffmpeg-value">pid {proc.pid}</span>
-      <span>{proc.sampled ? `${Math.round(proc.cpu)}% of a core` : "measuring cpu\u2026"}</span>
-      <CpuSparkline values={cpu} />
+      <span>{proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026"}</span>
       <span>{formatBytes(proc.rss)}</span>
       <span>{proc.threads} threads</span>
+      <span className="job-sparks">
+        <Sparkline
+          values={cpu}
+          tone="cpu"
+          perCore
+          label="CPU"
+          format={(value) => `${Math.round(value)}%`}
+        />
+        <Sparkline values={rss} tone="ram" label="Memory" format={formatBytes} />
+      </span>
     </div>
   );
 }
 
-// CpuSparkline draws where this job's CPU has been over the last couple of
-// minutes. The scale covers whole cores, so the dashed line is one core and a
-// curve that rises above it is the encoder spreading over several.
-function CpuSparkline({ values }: { values: number[] }) {
+// Sparkline draws where one reading has been over the last couple of minutes.
+// CPU is scaled to whole cores, so its dashed line is a single core and a curve
+// above it is the encoder spreading over several; memory has no such ceiling,
+// so it is scaled to its own window.
+function Sparkline({
+  values,
+  tone,
+  label,
+  format,
+  perCore,
+}: {
+  values: number[];
+  tone: "cpu" | "ram";
+  label: string;
+  format: (value: number) => string;
+  perCore?: boolean;
+}) {
   if (values.length < 2) return null;
 
-  const width = 56;
-  const height = 14;
+  const width = 46;
+  const height = 13;
   const pad = 1.5;
   const inner = height - pad * 2;
   const seconds = Math.round((values.length * POLL_MS) / 1000);
   const latest = values[values.length - 1];
   const peak = Math.max(...values);
-  const scale = Math.max(100, Math.ceil(peak / 100) * 100);
+  // A little headroom on a series with no ceiling of its own, so a memory that
+  // barely moves is a line near the top rather than a flat edge.
+  const scale = perCore ? Math.max(100, Math.ceil(peak / 100) * 100) : Math.max(peak * 1.1, 1);
   const step = (width - pad * 2) / (values.length - 1);
   const y = (value: number) => pad + inner - (Math.min(value, scale) / scale) * inner;
   const points = values.map((value, i) => `${(pad + i * step).toFixed(1)} ${y(value).toFixed(1)}`);
 
   return (
     <svg
-      className="job-spark"
+      className={`job-spark ${tone}`}
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={`CPU of this job's ffmpeg over the last ${seconds} seconds`}
+      aria-label={`${label} of this job's ffmpeg over the last ${seconds} seconds`}
     >
       <title>
-        {`${Math.round(latest)}% of a core now, peak ${Math.round(peak)}% over the last ${seconds}s`}
+        {`${label}: ${format(latest)} now, peak ${format(peak)} over the last ${seconds}s`}
       </title>
       <polygon
         className="job-spark-fill"
