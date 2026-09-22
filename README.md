@@ -1,16 +1,29 @@
-# Transcoder — a HandBrake-style web UI over ffmpeg
+
+
+<img src="docs/logo.svg" alt="Transcoder logo" width="96" align="left" />
 
 A single Go binary that serves a browser UI for transcoding video. Presets,
 a settings panel per topic, batch encoding of whole folders, a queue that
 survives a crash, output verification, and post-encode actions.
 
-The Go side never reimplements encoding — it builds ffmpeg command lines,
+The Go side never reimplements encoding - it builds ffmpeg command lines,
 supervises the process, parses `-progress` output and pushes updates to the
 browser over server-sent events.
 
+<br clear="left" />
+
+## Preview
+
+The main panel with the queue, the settings panes, the frame inspector and the
+live hardware report:
+
+<p align="center">
+  <img src="docs/panel.webp" alt="Transcoder web panel — settings, frame preview and hardware status" width="840" />
+</p>
+
 ## Requirements
 
-- Go 1.27 or newer (uses the method-pattern `http.ServeMux`)
+- Go 1.27 or newer
 - `ffmpeg` and `ffprobe` on `PATH` — ffmpeg 6.0+ for `-fpsmax` and `-fps_mode`
 
 ## Run
@@ -20,7 +33,7 @@ go build -o transcoder .
 ./transcoder -root ~/Videos -out ~/Videos/encoded
 ```
 
-Then open http://127.0.0.1:8723.
+Then open <http://127.0.0.1:8723>.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
@@ -92,6 +105,7 @@ POST   /api/queue/settings     verification, auto-delete, post-queue action
 GET    /api/queue/export       download the queue as JSON
 POST   /api/queue/import       add jobs from an exported file
 GET    /api/system              CPU, memory, GPUs, live ffmpeg usage, per job
+GET    /api/ffmpeg/{pid}/log   tail of one ffmpeg run's log, by the pid shown in the UI
 GET    /api/events             SSE: snapshot, job, queue
 ```
 
