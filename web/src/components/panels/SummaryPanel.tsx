@@ -120,32 +120,62 @@ export function SummaryPanel() {
       <TrimRange />
 
       <h3 className="group-title">What changes</h3>
-      <dl className="recap">
-        {rows.map((row) => (
-          <span key={row.term} style={{ display: "contents" }}>
-            <dt>{row.term}</dt>
-            <dd>
-              {row.was === undefined ? (
-                row.becomes
-              ) : row.becomes === undefined ? (
-                <>
-                  <span className="recap-was">{row.was}</span>
-                  <span className="recap-tag is-same">unchanged</span>
-                </>
-              ) : (
-                <>
-                  <span className="recap-was">{row.was}</span>
-                  <span className="recap-arrow" aria-hidden="true">
-                    &rarr;
-                  </span>
-                  <span className="recap-now">{row.becomes}</span>
-                  {row.kind && <span className="recap-tag">{row.kind}</span>}
-                </>
-              )}
-            </dd>
-          </span>
-        ))}
-      </dl>
+      <table className="recap">
+        <thead>
+          <tr>
+            <th scope="col">Property</th>
+            <th scope="col">Current</th>
+            <th scope="col" aria-hidden="true"></th>
+            <th scope="col">After encode</th>
+            <th scope="col">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const unchanged = row.was !== undefined && row.becomes === undefined;
+            return (
+              <tr key={row.term} className={unchanged ? "is-same" : undefined}>
+                <th scope="row">{row.term}</th>
+                {row.was === undefined ? (
+                  // No "before" exists (source name, output name) — the value
+                  // just is, so it spans the two value columns.
+                  <td colSpan={3}>
+                    <span className="recap-now">{row.becomes}</span>
+                  </td>
+                ) : unchanged ? (
+                  <>
+                    <td>
+                      <span className="recap-was">{row.was}</span>
+                    </td>
+                    <td className="recap-arrow" aria-hidden="true">
+                      =
+                    </td>
+                    <td>
+                      <span className="recap-was">{row.was}</span>
+                    </td>
+                    <td>
+                      <span className="recap-tag is-same">unchanged</span>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td>
+                      <span className="recap-was">{row.was}</span>
+                    </td>
+                    <td className="recap-arrow" aria-hidden="true">
+                      &rarr;
+                    </td>
+                    <td>
+                      <span className="recap-now">{row.becomes}</span>
+                    </td>
+                    <td>{row.kind && <span className="recap-tag">{row.kind}</span>}</td>
+                  </>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }

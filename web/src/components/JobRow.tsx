@@ -93,6 +93,7 @@ export function JobRow({ job }: { job: Job }) {
               </a>
               <ActionButton
                 label="Details"
+                accent
                 onClick={() =>
                   setProbe(
                     true,
@@ -235,6 +236,13 @@ function JobFfmpeg({ jobId }: { jobId: string }) {
     <div className="job-ffmpeg" title="The ffmpeg process this job is running">
       <span className="job-ffmpeg-label">ffmpeg</span>
       <span className="job-ffmpeg-value">pid {proc.pid}</span>
+      <button
+        className="btn btn-small btn-quiet job-log-btn"
+        title="Tail this ffmpeg process's log"
+        onClick={() => useStore.getState().setLogView(proc.pid, `pid ${proc.pid}`)}
+      >
+        Log
+      </button>
       <span>{proc.sampled ? `CPU: ${Math.round(proc.cpu)}%` : "measuring cpu\u2026"}</span>
       <Sparkline
         values={cpu}
@@ -329,14 +337,16 @@ function ActionButton({
   label,
   onClick,
   danger,
+  accent,
 }: {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  accent?: boolean;
 }) {
   return (
     <button
-      className={`btn btn-small btn-quiet${danger ? " btn-danger" : ""}`}
+      className={`btn btn-small btn-quiet${danger ? " btn-danger" : ""}${accent ? " btn-accent" : ""}`}
       onClick={async (e) => {
         const btn = e.currentTarget as HTMLButtonElement;
         btn.disabled = true;

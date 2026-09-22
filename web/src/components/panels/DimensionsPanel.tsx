@@ -353,12 +353,12 @@ export function DimensionsPanel() {
 
         <div className="crop-timeline">
           <button
-            className="btn btn-small btn-quiet"
+            className="btn btn-small btn-quiet crop-frame-btn"
             onClick={() => stepFrame(-1)}
             disabled={!limit}
             title="One frame back"
           >
-            {"\u27e8"} Frame
+            <span className="crop-frame-glyph" aria-hidden="true">&lsaquo;</span> Frame
           </button>
           <span className="crop-time">
             {formatPreciseTime(previewTime)}
@@ -375,12 +375,12 @@ export function DimensionsPanel() {
             title="Seek through the source file"
           />
           <button
-            className="btn btn-small btn-quiet"
+            className="btn btn-small btn-quiet crop-frame-btn"
             onClick={() => stepFrame(1)}
             disabled={!limit}
             title="One frame forward"
           >
-            Frame {"\u27e9"}
+            Frame <span className="crop-frame-glyph" aria-hidden="true">&rsaquo;</span>
           </button>
         </div>
 

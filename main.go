@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -27,6 +28,11 @@ var webAssets embed.FS
 
 // version is stamped in at build time by GoReleaser and the Dockerfile.
 var version = "dev"
+
+// processStart is when this server came up. A per-run ffmpeg log file older
+// than this belongs to an earlier boot, so its pid must not be served — the
+// OS may have given the same number to an unrelated process.
+var processStart = time.Now()
 
 var nullDevice = os.DevNull
 
@@ -164,6 +170,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/presets/{name}", s.handleDeletePreset)
 	mux.HandleFunc("GET /api/encoders", s.handleEncoders)
 	mux.HandleFunc("GET /api/system", s.handleSystem)
+	mux.HandleFunc("GET /api/ffmpeg/{pid}/log", s.handleFfmpegLog)
 
 	mux.HandleFunc("GET /api/jobs", s.handleListJobs)
 	mux.HandleFunc("POST /api/jobs", s.handleCreateJob)
@@ -780,6 +787,95 @@ func (s *server) handleDeletePreset(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- jobs ----
+
+// handleFfmpegLog tails the log file of one ffmpeg run, identified by the pid
+// the queue and the hardware report already show. Only pids this server
+// started are served: the log file lives in the private work directory and is
+// named for the pid, so anything else is a miss, and the pid must have been
+// seen running here (now, or since the last restart) — otherwise the endpoint
+// would happily tail any pid a visitor types.
+func (s *server) handleFfmpegLog(w http.ResponseWriter, r *http.Request) {
+	pid, err := strconv.Atoi(r.PathValue("pid"))
+	if err != nil || pid <= 0 {
+		writeErr(w, http.StatusBadRequest, "bad pid")
+		return
+	}
+	if !s.knownFFmpegPID(pid) {
+		writeErr(w, http.StatusNotFound, "no log for that pid")
+		return
+	}
+	path := filepath.Join(s.workDir, fmt.Sprintf("ffmpeg-%d.log", pid))
+	f, err := os.Open(path)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "no log for that pid")
+		return
+	}
+	defer f.Close()
+
+	// Tail: the modal asks for the last N lines every second, so read at most
+	// a bounded window from the end rather than the whole file.
+	lines := 400
+	if v := r.URL.Query().Get("lines"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 2000 {
+			lines = n
+		}
+	}
+	data, err := tailFile(f, int64(lines)*400)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "cannot read the log")
+		return
+	}
+	text := string(data)
+	trimmed := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	if len(trimmed) > lines {
+		trimmed = trimmed[len(trimmed)-lines:]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pid": pid, "lines": trimmed})
+}
+
+// knownFFmpegPID checks the pid was started by this server. A live pid in the
+// queue counts, and so does a log file from this boot whose job is already
+// finished — those are the files the cleanup has not got to yet.
+func (s *server) knownFFmpegPID(pid int) bool {
+	for _, id := range s.jobs.ffmpegPIDs() {
+		if id == pid {
+			return true
+		}
+	}
+	// A finished run's file must be younger than the server process, so a
+	// stale file left by an earlier boot is not resurrected for a recycled pid.
+	info, err := os.Stat(filepath.Join(s.workDir, fmt.Sprintf("ffmpeg-%d.log", pid)))
+	if err != nil {
+		return false
+	}
+	return info.ModTime().After(processStart)
+}
+
+// tailFile returns the last maxBytes of an open file, aligned to a line start.
+func tailFile(f *os.File, maxBytes int64) ([]byte, error) {
+	st, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := st.Size()
+	if size == 0 {
+		return []byte{}, nil
+	}
+	window := maxBytes
+	if window > size {
+		window = size
+	}
+	data := make([]byte, window)
+	if _, err := f.ReadAt(data, size-window); err != nil {
+		return nil, err
+	}
+	if window < size { // drop the partial line at the start of the window
+		if i := bytes.IndexByte(data, '\n'); i >= 0 {
+			data = data[i+1:]
+		}
+	}
+	return data, nil
+}
 
 func (s *server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.jobs.List())

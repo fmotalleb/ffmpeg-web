@@ -45,15 +45,20 @@ export function HardwareStatus() {
         className={`hw-chip${open ? " is-open" : ""}`}
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        title="What this machine has and what it is being asked to do"
+        title="System monitor — what this machine has and what the encodes are doing to it right now"
       >
         <span className={`hw-dot ${dot}`} />
         <span className="hw-chip-label">Hardware</span>
         <span className="hw-chip-value">{value}</span>
+        <span className="hw-chip-kind">monitor</span>
       </button>
 
       {open && (
-        <div className="hw-panel" role="dialog" aria-label="Hardware status">
+        <div className="hw-panel" role="dialog" aria-label="Hardware monitor">
+          <p className="hw-panel-note">
+            Live read-out of this machine and its encoders — nothing here changes
+            the queue, it only reports what is happening.
+          </p>
           <FfmpegSection usage={status?.ffmpegUsage} jobs={running} cpus={status?.cpus ?? 1} />
           <EncoderSection status={status} />
           <DeviceSection status={status} />
@@ -177,6 +182,8 @@ function FfmpegSection({
 // ProcessFacts describes one ffmpeg process: its pid, what it costs and how
 // wide it runs. Everything shown here is read off that pid.
 function ProcessFacts({ proc, cpus }: { proc: FfmpegProcess | null; cpus: number }) {
+  const openLog = () =>
+    useStore.getState().setLogView(proc!.pid, `pid ${proc!.pid}`);
   if (!proc) {
     return (
       <div className="hw-row hw-sub">
@@ -187,7 +194,16 @@ function ProcessFacts({ proc, cpus }: { proc: FfmpegProcess | null; cpus: number
   }
   return (
     <div className="hw-row hw-sub">
-      <span>ffmpeg pid {proc.pid}</span>
+      <span className="hw-pid">
+        ffmpeg pid {proc.pid}
+        <button
+          className="btn btn-small btn-quiet hw-log-btn"
+          title="Tail this ffmpeg process's log"
+          onClick={openLog}
+        >
+          Log
+        </button>
+      </span>
       <span className="hw-value">
         {[
           proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026",
