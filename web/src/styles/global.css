@@ -238,6 +238,16 @@ a.btn:hover {
 .btn-quiet { background: transparent; border-color: transparent; color: var(--ink-dim); }
 .btn-quiet:hover { background: var(--raised); color: var(--ink); }
 
+/* An action worth finding — the Details view of a finished encode, the Log of
+   a running one — gets a quiet border and its own colour so it reads as a
+   button rather than melting into the row of quiet ones. */
+.btn-accent {
+  background: rgba(89, 191, 176, 0.12);
+  border-color: rgba(89, 191, 176, 0.55);
+  color: var(--teal);
+}
+.btn-accent:hover { background: rgba(89, 191, 176, 0.22); border-color: var(--teal); }
+
 .btn-danger:hover:not(:disabled) { background: rgba(217, 112, 102, 0.14); color: var(--rose); }
 
 .btn-small { padding: 4px 10px; font-size: 13px; }
@@ -271,6 +281,17 @@ a.btn:hover {
 .hw-dot.off { background: var(--line); }
 .hw-chip-label { font-size: 11.5px; color: var(--ink-dim); }
 .hw-chip-value { font-size: 12px; font-family: var(--mono); }
+/* The chip is a read-out, not a control — say so right on it. */
+.hw-chip-kind {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
 
 .hw-panel {
   position: absolute;
@@ -285,6 +306,12 @@ a.btn:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.hw-panel-note {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  color: var(--ink-dim);
 }
 
 .hw-section { margin-top: 14px; }
@@ -849,28 +876,58 @@ a.btn:hover {
 
 /* ---------- recap ---------- */
 
+/* The recap table: before / after side by side, so the diff reads down the
+   columns instead of inline. */
 .recap {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 6px 16px;
-  margin: 0;
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
 }
-.recap dt { color: var(--ink-dim); }
-.recap dd {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px 8px;
-  margin: 0;
+.recap th,
+.recap td {
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: baseline;
+}
+.recap thead th {
+  color: var(--ink-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+.recap tbody tr {
+  border-bottom: 1px solid var(--line);
+}
+.recap tbody tr:last-child {
+  border-bottom: none;
+}
+.recap tbody th {
+  color: var(--ink-dim);
+  font-weight: 400;
+  white-space: nowrap;
+}
+.recap tbody td {
   font-family: var(--mono);
 }
-/* The old value stays quiet; the new one is the thing being decided. */
+/* Values sit in separate columns; keep long ones readable. */
+.recap td.recap-arrow {
+  padding: 6px 2px;
+  color: var(--line);
+  text-align: center;
+  white-space: nowrap;
+}
 .recap-was { color: var(--ink-dim); overflow-wrap: anywhere; }
-.recap-arrow { color: var(--line); }
 .recap-now { color: var(--ink); overflow-wrap: anywhere; }
+/* Unchanged rows recede: quiet text on a quiet stripe. */
+.recap tr.is-same td,
+.recap tr.is-same th {
+  color: var(--ink-dim);
+}
+.recap tr.is-same .recap-was { color: var(--ink-dim); }
 .recap-tag {
-  align-self: center;
+  display: inline-block;
   padding: 1px 7px;
   border-radius: 8px;
   background: rgba(224, 165, 86, 0.16);
@@ -880,6 +937,7 @@ a.btn:hover {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .recap-tag.is-same { background: var(--raised); color: var(--ink-dim); }
 
@@ -958,6 +1016,16 @@ a.btn:hover {
   font-style: normal;
   color: var(--ink-faint, var(--ink-dim));
   opacity: 0.7;
+}
+/* The frame-step buttons hold a glyph and a word; keep the glyph on the same
+   line as its word and the whole label on one line, whatever the flex layout
+   does to the rest of the bar. */
+.crop-frame-btn { white-space: nowrap; }
+.crop-frame-glyph {
+  display: inline-block;
+  font-size: 13px;
+  line-height: 1;
+  vertical-align: -0.05em;
 }
 
 .crop-readout {
@@ -1178,6 +1246,10 @@ a.btn:hover {
   color: var(--amber);
 }
 .job-ffmpeg-value { color: var(--ink); }
+.job-log-btn { padding: 1px 8px; font-size: 10.5px; }
+
+.hw-pid { display: inline-flex; align-items: center; gap: 6px; }
+.hw-log-btn { padding: 1px 8px; font-size: 10.5px; }
 
 .job-sparks {
   display: inline-flex;
@@ -1225,6 +1297,52 @@ a.btn:hover {
 
 /* ---------- modal ---------- */
 
+/* ffmpeg log viewer: a terminal-style tail of one run's output. */
+.log-modal { width: min(880px, 100%); }
+.log-modal .modal-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+.log-pid {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--teal);
+}
+.log-tools { display: flex; align-items: center; gap: 8px; }
+.log-view {
+  margin: 0;
+  padding: 12px 14px 16px;
+  min-height: 220px;
+  max-height: 56vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.log-error { color: var(--rose); }
+.log-empty { color: var(--ink-faint, var(--ink-dim)); font-style: italic; }
+.log-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+}
+.log-follow { opacity: 0.7; }
+
 .modal {
   position: fixed;
   inset: 0;
@@ -1254,6 +1372,7 @@ a.btn:hover {
   border-bottom: 1px solid var(--line);
 }
 .modal-head h2 { margin: 0; font-size: 15px; }
+.modal-head-actions { display: flex; align-items: center; gap: 8px; }
 
 .modal-body { padding: 14px 16px; overflow-y: auto; }
 

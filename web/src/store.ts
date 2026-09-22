@@ -116,6 +116,8 @@ export interface AppState {
   probeOpen: boolean;
   probeTitle: string;
   probeUrl: string;
+  logViewPid: number | null;
+  logViewTitle: string;
   railCollapsed: boolean;
   queueSettingsOpen: boolean;
   queueCollapsed: boolean;
@@ -149,6 +151,7 @@ export interface AppState {
   setBatchOpen: (open: boolean) => void;
   setBatchDir: (dir: string | null) => void;
   setProbe: (open: boolean, title?: string, url?: string) => void;
+  setLogView: (pid: number | null, title?: string) => void;
   setRailCollapsed: (c: boolean) => void;
   setQueueSettingsOpen: (o: boolean) => void;
   setQueueCollapsed: (c: boolean) => void;
@@ -192,6 +195,8 @@ export const useStore = create<AppState>((set, _get) => ({
   probeOpen: false,
   probeTitle: "",
   probeUrl: "",
+  logViewPid: null,
+  logViewTitle: "",
   railCollapsed: false,
   queueSettingsOpen: false,
   queueCollapsed: false,
@@ -314,6 +319,8 @@ export const useStore = create<AppState>((set, _get) => ({
   setBatchDir: (dir) => set({ batchDir: dir }),
   setProbe: (open, title = "", url = "") =>
     set({ probeOpen: open, probeTitle: title, probeUrl: url }),
+  setLogView: (pid, title = "") =>
+    set({ logViewPid: pid, logViewTitle: title }),
   setRailCollapsed: (c) => set({ railCollapsed: c }),
   setQueueSettingsOpen: (o) => set({ queueSettingsOpen: o }),
   setQueueCollapsed: (c) => set({ queueCollapsed: c }),

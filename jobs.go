@@ -160,8 +160,30 @@ func contains(list []string, v string) bool {
 }
 
 func (m *Manager) Start() {
+	go m.cleanLogs()
 	go m.loop()
 	m.nudge()
+}
+
+// cleanLogs drops per-run ffmpeg logs older than a day. Each run writes
+// workDir/ffmpeg-<pid>.log so the browser can tail it by pid; the file is kept
+// after the job ends so a failed encode's output stays readable, but not
+// forever — long enough to check on yesterday's failure, not to fill the disk.
+func (m *Manager) cleanLogs() {
+	entries, err := os.ReadDir(m.workDir)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "ffmpeg-") || !strings.HasSuffix(name, ".log") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			os.Remove(filepath.Join(m.workDir, name))
+		}
+	}
 }
 
 func (m *Manager) Snapshot() Snapshot {
@@ -741,6 +763,11 @@ func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) 
 	job.ffmpegPID = cmd.Process.Pid
 	m.mu.Unlock()
 
+	// This run's stderr also goes to workDir/ffmpeg-<pid>.log, keyed by the
+	// pid the browser is shown, so its Log button can tail the exact process —
+	// including after the job has finished, failed or been cancelled.
+	logW := newRunLog(m.workDir, cmd.Process.Pid, args)
+
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); m.readProgress(job, stdout) }()
@@ -755,6 +782,7 @@ func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) 
 			if line == "" {
 				continue
 			}
+			logW.write(line)
 			errLines = append(errLines, line)
 			if len(errLines) > 40 {
 				errLines = errLines[1:]
@@ -763,6 +791,7 @@ func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) 
 		}
 	}()
 	wg.Wait()
+	logW.close()
 
 	if err := cmd.Wait(); err != nil {
 		if ctx.Err() != nil {
@@ -783,6 +812,41 @@ func (m *Manager) appendLog(job *Job, line string) {
 		job.logBuf = job.logBuf[len(job.logBuf)-400:]
 	}
 	m.mu.Unlock()
+}
+
+// runLog is one ffmpeg run's log file: workDir/ffmpeg-<pid>.log. The queue
+// already keeps the last 400 lines in memory for the job, but the browser
+// talks about processes — the pid in a job row or the hardware popover — so
+// the file is keyed by pid instead and outlives the job. Best effort: a run
+// whose log cannot be written proceeds without one.
+type runLog struct {
+	f *os.File
+	w *bufio.Writer
+}
+
+func newRunLog(workDir string, pid int, args []string) runLog {
+	f, err := os.Create(filepath.Join(workDir, fmt.Sprintf("ffmpeg-%d.log", pid)))
+	if err != nil {
+		return runLog{}
+	}
+	w := bufio.NewWriter(f)
+	fmt.Fprintf(w, "$ ffmpeg %s\n", strings.Join(args, " "))
+	return runLog{f: f, w: w}
+}
+
+func (l runLog) write(line string) {
+	if l.w == nil {
+		return
+	}
+	fmt.Fprintln(l.w, line)
+}
+
+func (l runLog) close() {
+	if l.f == nil {
+		return
+	}
+	_ = l.w.Flush()
+	_ = l.f.Close()
 }
 
 func (m *Manager) readProgress(job *Job, r io.Reader) {

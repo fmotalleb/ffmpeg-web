@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../../store";
-import { api } from "../../api";
+import { api, toast } from "../../api";
 import { formatBytes, formatDuration, baseName } from "../../utils";
 
 type Tags = Record<string, string>;
@@ -91,9 +91,26 @@ export function ProbeViewer() {
       <div className="modal-card probe-modal" role="dialog" aria-modal="true" aria-labelledby="probe-title">
         <header className="modal-head">
           <h2 id="probe-title">{probeTitle}</h2>
-          <button className="btn btn-quiet" onClick={() => setProbe(false)}>
-            Close
-          </button>
+          <div className="modal-head-actions">
+            <button
+              className="btn btn-small"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+                  toast("JSON copied to the clipboard", true);
+                } catch {
+                  toast("The browser refused clipboard access");
+                }
+              }}
+              disabled={!data}
+              title="Copy the full ffprobe report as JSON"
+            >
+              Copy JSON
+            </button>
+            <button className="btn btn-quiet" onClick={() => setProbe(false)}>
+              Close
+            </button>
+          </div>
         </header>
         {data ? (
           <>

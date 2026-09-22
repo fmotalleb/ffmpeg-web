@@ -17,6 +17,7 @@ import { Queue } from "./components/Queue";
 import { FileBrowser } from "./components/modals/FileBrowser";
 import { BatchEncode } from "./components/modals/BatchEncode";
 import { ProbeViewer } from "./components/modals/ProbeViewer";
+import { FfmpegLogViewer } from "./components/modals/FfmpegLogViewer";
 import { Toast } from "./components/Toast";
 import type { EncoderCatalog, Job, Snapshot } from "./types";
 
@@ -139,6 +140,7 @@ export function App() {
       <FileBrowser />
       <BatchEncode />
       <ProbeViewer />
+      <FfmpegLogViewer />
       <Toast />
     </>
   );
