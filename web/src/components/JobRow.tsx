@@ -19,6 +19,15 @@ export function JobRow({ job }: { job: Job }) {
 
   const threshold = queueSettings?.shrinkThreshold || 20;
 
+  const projectedSize =
+    job.outSize > 0 && job.progress > 0.01
+      ? Math.round(job.outSize / job.progress)
+      : 0;
+  const projectedPct =
+    job.sourceSize > 0 && projectedSize > 0
+      ? (1 - projectedSize / job.sourceSize) * 100
+      : 0;
+
   const handlePreview = async () => {
     useStore.getState().setPreviewJobId(job.id);
     setActiveTab("preview");
@@ -151,11 +160,11 @@ export function JobRow({ job }: { job: Job }) {
               </span>
             )}
             {job.eta > 0 && <span>{formatDuration(job.eta)} left</span>}
-            {job.estimatedSize > 0 && (
-              <span>heading for about {formatBytes(job.estimatedSize)}</span>
+            {projectedSize > 0 && (
+              <span>heading for about {formatBytes(projectedSize)}</span>
             )}
-            {job.sourceSize > 0 && job.estimatedSize > 0 && (
-              <SavingFact pct={job.savedPct} projected />
+            {job.sourceSize > 0 && projectedSize > 0 && (
+              <SavingFact pct={projectedPct} projected />
             )}
           </>
         )}
