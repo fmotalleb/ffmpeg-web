@@ -857,7 +857,31 @@ a.btn:hover {
   font-size: 13px;
 }
 .recap dt { color: var(--ink-dim); }
-.recap dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.recap dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  margin: 0;
+  font-family: var(--mono);
+}
+/* The old value stays quiet; the new one is the thing being decided. */
+.recap-was { color: var(--ink-dim); overflow-wrap: anywhere; }
+.recap-arrow { color: var(--line); }
+.recap-now { color: var(--ink); overflow-wrap: anywhere; }
+.recap-tag {
+  align-self: center;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: rgba(224, 165, 86, 0.16);
+  color: var(--amber);
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.recap-tag.is-same { background: var(--raised); color: var(--ink-dim); }
 
 /* ---------- crop ---------- */
 
@@ -1155,16 +1179,25 @@ a.btn:hover {
 }
 .job-ffmpeg-value { color: var(--ink); }
 
-.job-spark { align-self: center; flex: none; }
+.job-sparks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.job-spark { flex: none; }
 .job-spark-line {
   fill: none;
-  stroke: var(--amber);
   stroke-width: 1.2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.job-spark-fill { fill: rgba(224, 165, 86, 0.2); }
+.job-spark-fill { stroke: none; }
 .job-spark-core { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 2; }
+.job-spark.cpu .job-spark-line { stroke: var(--amber); }
+.job-spark.cpu .job-spark-fill { fill: rgba(224, 165, 86, 0.2); }
+.job-spark.ram .job-spark-line { stroke: var(--teal); }
+.job-spark.ram .job-spark-fill { fill: rgba(89, 191, 176, 0.18); }
 
 .job-saving { color: var(--teal); }
 .job-saving.negative { color: var(--amber); }
