@@ -235,19 +235,17 @@ function JobFfmpeg({ jobId }: { jobId: string }) {
     <div className="job-ffmpeg" title="The ffmpeg process this job is running">
       <span className="job-ffmpeg-label">ffmpeg</span>
       <span className="job-ffmpeg-value">pid {proc.pid}</span>
-      <span>{proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026"}</span>
-      <span>{formatBytes(proc.rss)}</span>
+      <span>{proc.sampled ? `CPU: ${Math.round(proc.cpu)}%` : "measuring cpu\u2026"}</span>
+      <Sparkline
+        values={cpu}
+        tone="cpu"
+        perCore
+        label="CPU"
+        format={(value) => `${Math.round(value)}%`}
+      />
+      <span>{`RAM: ${formatBytes(proc.rss)}`}</span>
+      <Sparkline values={rss} tone="ram" label="Memory" format={formatBytes} />
       <span>{proc.threads} threads</span>
-      <span className="job-sparks">
-        <Sparkline
-          values={cpu}
-          tone="cpu"
-          perCore
-          label="CPU"
-          format={(value) => `${Math.round(value)}%`}
-        />
-        <Sparkline values={rss} tone="ram" label="Memory" format={formatBytes} />
-      </span>
     </div>
   );
 }
