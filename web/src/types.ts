@@ -135,7 +135,6 @@ export interface Job {
   bitrate: string;
   frame: number;
   outSize: number;
-  estimatedSize: number;
   sourceSize: number;
   savedPct: number;
   eta: number;
