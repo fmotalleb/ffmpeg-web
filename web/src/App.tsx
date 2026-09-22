@@ -113,11 +113,12 @@ export function App() {
   }, [source, fitToSource]);
 
   const activeTab = useStore((s) => s.activeTab);
+  const railCollapsed = useStore((s) => s.railCollapsed);
 
   return (
     <>
       <TopBar />
-      <main className="shell">
+      <main className={`shell${railCollapsed ? " rail-collapsed" : ""}`}>
         <PresetsRail />
         <section className="work">
           <SourceStrip />

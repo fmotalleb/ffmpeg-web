@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useStore } from "../store";
 import { deletePreset, savePreset, toast } from "../api";
+import { Icon } from "./icons";
 import type { Preset } from "../types";
 
 export function PresetsRail() {
@@ -71,19 +72,39 @@ export function PresetsRail() {
     }
   }
 
+  // Collapsed, the rail leaves a handle behind so the presets can always be
+  // brought back — the sidebar narrows instead of disappearing.
+  if (railCollapsed) {
+    return (
+      <aside className="rail is-collapsed" aria-label="Presets">
+        <button
+          className="rail-stub"
+          title="Show presets"
+          aria-expanded={false}
+          onClick={() => setRailCollapsed(false)}
+        >
+          <span className="rail-chevron is-open">
+            <Icon name="chevron" />
+          </span>
+          <span className="rail-stub-label">Presets</span>
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <aside
-      className={`rail${railCollapsed ? " collapsed" : ""}`}
-      aria-label="Presets"
-    >
+    <aside className="rail" aria-label="Presets">
       <div className="rail-header">
         <h2 className="rail-title">Presets</h2>
         <button
-          className="btn btn-small btn-quiet"
-          title="Close presets"
-          onClick={() => setRailCollapsed(!railCollapsed)}
+          className="btn btn-small btn-quiet rail-collapse"
+          title="Hide presets"
+          aria-expanded={true}
+          onClick={() => setRailCollapsed(true)}
         >
-          ✕
+          <span className="rail-chevron">
+            <Icon name="chevron" />
+          </span>
         </button>
       </div>
       <div className="preset-list">

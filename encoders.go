@@ -237,10 +237,16 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
+// missingFromFFmpeg reports whether the local ffmpeg build simply has no such
+// encoder, as opposed to the machine lacking the hardware to run it.
+func missingFromFFmpeg(l encoderLib) bool {
+	return ffmpegVideoEncoders != nil && !ffmpegVideoEncoders[l.FFmpeg]
+}
+
 // unavailableReason explains why a library cannot be used here, or returns ""
 // when it can. The text is shown next to the disabled entry in the UI.
 func unavailableReason(l encoderLib) string {
-	if ffmpegVideoEncoders != nil && !ffmpegVideoEncoders[l.FFmpeg] {
+	if missingFromFFmpeg(l) {
 		return fmt.Sprintf("this ffmpeg build has no %s encoder", l.FFmpeg)
 	}
 	switch l.engine {

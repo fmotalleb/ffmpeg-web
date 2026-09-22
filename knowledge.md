@@ -37,6 +37,7 @@ go run . -root ~/Videos -out ~/Videos/encoded
 | `store.go` | Atomic JSON queue file persistence (coalesced writes) |
 | `verify.go` | Output verification and post-queue hooks |
 | `frames.go` | Frame extraction and caching |
+| `system.go` | Hardware report for `/api/system`: CPU/memory/load, GPU devices, per-family hardware encoder availability, live ffmpeg process usage |
 | `exec.go` | Process execution helpers |
 | `web/` | Frontend — vanilla JS/CSS/HTML, no framework, no build step |
 | `web/app.js` | Main application logic |
@@ -75,4 +76,5 @@ go run . -root ~/Videos -out ~/Videos/encoded
 - `go.sum` does not exist — this project has zero dependencies.
 - ffmpeg 6.0+ required for `-fpsmax` and `-fps_mode` flags.
 - Batch encoding does not probe at queue time (deferred to worker).
+- `/api/system` figures come from `/proc` (load, memory, per-process CPU): on a host without it those fields are zero (load uses -1) and the UI hides them. The ffmpeg CPU rate needs two samples, so the first response after a restart reports `sampled: false`.
 - Editing a running job requires cancelling it first.
