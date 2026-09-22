@@ -49,11 +49,8 @@ export function useSystemStatus(): Snapshot {
 // useJobFfmpeg is the ffmpeg process a single job is encoding with, taken from
 // the last report. Matching on the job id is what makes it that job's process
 // and not another one running on the same machine.
-export function useJobFfmpeg(jobId: string): {
-  status: SystemStatus | null;
-  process: FfmpegProcess | null;
-} {
-  const { status } = useSystemStatus();
-  const process = status?.ffmpegUsage.processes.find((p) => p.jobId === jobId) ?? null;
-  return { status, process };
+export function useJobFfmpeg(jobId: string): Snapshot & { process: FfmpegProcess | null } {
+  const snapshot = useSystemStatus();
+  const process = snapshot.status?.ffmpegUsage.processes.find((p) => p.jobId === jobId) ?? null;
+  return { ...snapshot, process };
 }

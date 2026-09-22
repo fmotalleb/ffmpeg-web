@@ -60,7 +60,7 @@ queue file to survive a restart.
 | `ffmpeg.go` | `Spec` types and the argument builder (filters, rate control, two-pass) |
 | `probe.go` | ffprobe wrapper reduced to what the UI shows |
 | `presets.go` | built-in presets |
-| `system.go` | hardware report: CPU, memory, graphics devices, what ffmpeg is using |
+| `system.go` | hardware report: CPU, memory, graphics devices, what each job's ffmpeg is using |
 | `web/` | the UI — no framework, no build step |
 
 ## API
@@ -91,7 +91,7 @@ POST   /api/queue/pause        {"paused":true}
 POST   /api/queue/settings     verification, auto-delete, post-queue action
 GET    /api/queue/export       download the queue as JSON
 POST   /api/queue/import       add jobs from an exported file
-GET    /api/system              CPU, memory, GPUs, live ffmpeg usage
+GET    /api/system              CPU, memory, GPUs, live ffmpeg usage, per job
 GET    /api/events             SSE: snapshot, job, queue
 ```
 
@@ -162,6 +162,12 @@ seconds apart, so it is the current rate rather than an average since startup �
 along with their memory, thread count, and each running job's fps, speed and
 ETA. Load and memory come from `/proc` as well, so on hosts without it only the
 encoder and device parts are filled in.
+
+The queue's own encodes are reported against the job that started them. The
+manager remembers the PID of each ffmpeg it launches, so a running job row
+shows that process — its PID, CPU, memory and thread count — rather than
+averages over whatever else happens to be running on the machine; the same
+attribution labels the processes in the hardware popover.
 
 ## Frame inspector
 
