@@ -1155,6 +1155,17 @@ a.btn:hover {
 }
 .job-ffmpeg-value { color: var(--ink); }
 
+.job-spark { align-self: center; flex: none; }
+.job-spark-line {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.job-spark-fill { fill: rgba(224, 165, 86, 0.2); }
+.job-spark-core { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 2; }
+
 .job-saving { color: var(--teal); }
 .job-saving.negative { color: var(--amber); }
 .job-verified { color: var(--teal); }
