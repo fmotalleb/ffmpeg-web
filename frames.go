@@ -70,7 +70,7 @@ func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("preview encode failed: %s", firstLine(msg))
+		return nil, fmt.Errorf("preview encode failed: %s", msg)
 	}
 
 	// Extract the middle frame by frame number — exact alignment regardless
@@ -99,7 +99,7 @@ func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("could not read a frame: %s", firstLine(msg))
+		return nil, fmt.Errorf("could not read a frame: %s", msg)
 	}
 	if frameOut.Len() == 0 {
 		return nil, fmt.Errorf("no frame at that time — it may be past the end of the video")
@@ -146,7 +146,7 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("could not read a frame: %s", firstLine(msg))
+		return nil, fmt.Errorf("could not read a frame: %s", msg)
 	}
 	if out.Len() == 0 {
 		return nil, fmt.Errorf("no frame at that time — it may be past the end of the video")
@@ -189,7 +189,7 @@ func extractClip(ctx context.Context, ffmpegBin, path string, atSeconds, duratio
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("could not extract clip: %s", firstLine(msg))
+		return nil, fmt.Errorf("could not extract clip: %s", msg)
 	}
 
 	data, err := os.ReadFile(tmpPath)
@@ -234,7 +234,7 @@ func encodePreviewClip(ctx context.Context, ffmpegBin, path string, atSeconds, d
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("preview clip encode failed: %s", firstLine(msg))
+		return nil, fmt.Errorf("preview clip encode failed: %s", msg)
 	}
 
 	data, err := os.ReadFile(tmpPath)
