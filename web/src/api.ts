@@ -1,4 +1,4 @@
-import type { BrowseResponse, MediaInfo, PreviewCommand, ScanResponse, Spec } from "./types";
+import type { BrowseResponse, MediaInfo, PreviewCommand, Preset, ScanResponse, Spec } from "./types";
 
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
@@ -32,6 +32,16 @@ export async function scan(dir: string, recursive: boolean): Promise<ScanRespons
 
 export async function previewCommand(spec: Spec): Promise<PreviewCommand> {
   return api("/api/preview", { method: "POST", body: JSON.stringify(spec) });
+}
+
+export async function savePreset(
+  preset: Pick<Preset, "name" | "group" | "note"> & { settings: Spec },
+): Promise<Preset[]> {
+  return api("/api/presets", { method: "POST", body: JSON.stringify(preset) });
+}
+
+export async function deletePreset(name: string): Promise<Preset[]> {
+  return api(`/api/presets/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
 let toastFn: ((msg: string, ok?: boolean) => void) | null = null;

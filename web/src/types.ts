@@ -114,6 +114,7 @@ export interface Preset {
   name: string;
   group: string;
   note: string;
+  owned: boolean;
   settings: Spec;
 }
 

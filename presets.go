@@ -1,12 +1,27 @@
 package main
 
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"hash/fnv"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
 // Preset is a named starting point. The UI merges it into the current settings;
-// the user can then change anything before queueing.
+// the user can then change anything before queueing. Owned presets were saved
+// by the user and can be replaced or deleted; built-ins in the code never are.
 type Preset struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Group    string `json:"group"`
 	Note     string `json:"note"`
+	Owned    bool   `json:"owned"`
 	Settings Spec   `json:"settings"`
 }
 
@@ -139,4 +154,148 @@ func buildPresets() []Preset {
 		{ID: "remux", Name: "Remux only", Group: "Lossless-ish",
 			Note: "Changes the container, re-encodes nothing", Settings: remux},
 	}
+}
+
+func builtinPresetByName(name string) (Preset, bool) {
+	for _, p := range presets {
+		if strings.EqualFold(p.Name, name) {
+			return p, true
+		}
+	}
+	return Preset{}, false
+}
+
+// presetStore keeps the presets the user saves. Built-ins stay in code; user
+// presets live in one JSON file next to the queue and are keyed by name —
+// saving a preset with a name that already exists replaces it in place.
+type presetStore struct {
+	path string
+	mu   sync.Mutex
+	user []Preset
+}
+
+func newPresetStore(path string) *presetStore {
+	return &presetStore{path: path}
+}
+
+func (s *presetStore) list() []Preset {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]Preset, 0, len(presets)+len(s.user))
+	out = append(out, presets...)
+	out = append(out, s.user...)
+	return out
+}
+
+// save creates a preset, or replaces the user preset with the same name. The
+// name is the identity, so a repeat save never duplicates.
+func (s *presetStore) save(name, group, note string, settings Spec) (Preset, error) {
+	name = strings.TrimSpace(name)
+	switch {
+	case name == "":
+		return Preset{}, errors.New("give the preset a name")
+	case len(name) > 60:
+		return Preset{}, errors.New("preset name is too long (max 60 characters)")
+	}
+	if _, taken := builtinPresetByName(name); taken {
+		return Preset{}, fmt.Errorf("%q is a built-in preset; pick a different name", name)
+	}
+	if settings.Container == "" {
+		return Preset{}, errors.New("the preset has no settings to save")
+	}
+	// A preset is a starting point, not a snapshot of one file. Drop whatever
+	// points at a particular source or output so applying it always starts clean.
+	settings.Input = ""
+	settings.OutputName = ""
+	settings.Trim = TrimSpec{}
+	settings.Audio = AudioSpec{
+		Encoder: settings.Audio.Encoder, Bitrate: settings.Audio.Bitrate,
+		Mixdown: settings.Audio.Mixdown, SampleRate: settings.Audio.SampleRate,
+		Gain: settings.Audio.Gain, Normalize: settings.Audio.Normalize,
+	}
+	settings.Subtitle.Track = 0
+
+	group = strings.TrimSpace(group)
+	if group == "" {
+		group = "My presets"
+	}
+	p := Preset{
+		ID:       "user-" + fmt.Sprintf("%x", fnvHash(name)),
+		Name:     name,
+		Group:    group,
+		Note:     strings.TrimSpace(note),
+		Owned:    true,
+		Settings: settings,
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.user {
+		if strings.EqualFold(s.user[i].Name, name) {
+			s.user[i] = p
+			return p, s.write()
+		}
+	}
+	s.user = append(s.user, p)
+	if err := s.write(); err != nil {
+		s.user = s.user[:len(s.user)-1]
+		return Preset{}, err
+	}
+	return p, nil
+}
+
+func (s *presetStore) delete(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("empty preset name")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.user {
+		if strings.EqualFold(s.user[i].Name, name) {
+			s.user = append(s.user[:i], s.user[i+1:]...)
+			return s.write()
+		}
+	}
+	return fmt.Errorf("no preset named %q", name)
+}
+
+func (s *presetStore) load() {
+	body, err := os.ReadFile(s.path)
+	if os.IsNotExist(err) {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		log.Printf("could not read presets: %v", err)
+		return
+	}
+	if err := json.Unmarshal(body, &s.user); err != nil {
+		backup := fmt.Sprintf("%s.broken-%d", s.path, time.Now().Unix())
+		_ = os.Rename(s.path, backup)
+		log.Printf("presets file was unreadable, moved it to %s", backup)
+		s.user = nil
+	}
+}
+
+func (s *presetStore) write() error {
+	body, err := json.MarshalIndent(s.user, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return err
+	}
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path)
+}
+
+func fnvHash(name string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.ToLower(name)))
+	return h.Sum64()
 }

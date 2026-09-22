@@ -128,6 +128,7 @@ export interface AppState {
   setEditingJobId: (id: string | null) => void;
   setPreviewJobId: (id: string | null) => void;
   setPresets: (p: Preset[]) => void;
+  setPresetId: (id: string | null) => void;
   applyPreset: (p: Preset) => void;
   setConfig: (cfg: { root: string; outDir: string; allowCommands: boolean }) => void;
   setQueuePaused: (paused: boolean) => void;
@@ -247,6 +248,7 @@ export const useStore = create<AppState>((set, _get) => ({
       previewTime: id === s.previewJobId ? s.previewTime : 0,
     })),
   setPresets: (p) => set({ presets: p }),
+  setPresetId: (id) => set({ presetId: id }),
 
   applyPreset: (preset) =>
     set((s) => {

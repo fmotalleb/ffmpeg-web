@@ -47,6 +47,7 @@ type server struct {
 	jobs      *Manager
 	broker    *Broker
 	store     *Store
+	presets   *presetStore
 	frames    *frameCache
 	maxUpload int64
 	allowCmds bool
@@ -97,10 +98,13 @@ func main() {
 	store.Start(manager.Snapshot)
 	manager.Start()
 
+	presetStore := newPresetStore(filepath.Join(outDir, "presets.json"))
+	presetStore.load()
+
 	srv := &server{
 		mediaRoot: mediaRoot, outDir: outDir, uploadDir: uploadDir, workDir: workDir,
 		ffmpeg: *ffmpegBin, ffprobe: *ffprobeBin,
-		broker: broker, jobs: manager, store: store, frames: newFrameCache(256 << 20),
+		broker: broker, jobs: manager, store: store, presets: presetStore, frames: newFrameCache(256 << 20),
 		maxUpload: *maxUpload, allowCmds: *allowCmds,
 	}
 
@@ -154,6 +158,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/probe/raw", s.handleProbeRaw)
 	mux.HandleFunc("POST /api/upload", s.handleUpload)
 	mux.HandleFunc("GET /api/presets", s.handlePresets)
+	mux.HandleFunc("POST /api/presets", s.handleSavePreset)
+	mux.HandleFunc("DELETE /api/presets/{name}", s.handleDeletePreset)
 	mux.HandleFunc("GET /api/encoders", s.handleEncoders)
 
 	mux.HandleFunc("GET /api/jobs", s.handleListJobs)
@@ -739,7 +745,35 @@ func sanitizeName(name string) string {
 }
 
 func (s *server) handlePresets(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, presets)
+	writeJSON(w, http.StatusOK, s.presets.list())
+}
+
+type savePresetRequest struct {
+	Name     string `json:"name"`
+	Group    string `json:"group"`
+	Note     string `json:"note"`
+	Settings Spec   `json:"settings"`
+}
+
+func (s *server) handleSavePreset(w http.ResponseWriter, r *http.Request) {
+	var body savePresetRequest
+	if err := decodeBody(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := s.presets.save(body.Name, body.Group, body.Note, body.Settings); err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.presets.list())
+}
+
+func (s *server) handleDeletePreset(w http.ResponseWriter, r *http.Request) {
+	if err := s.presets.delete(r.PathValue("name")); err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.presets.list())
 }
 
 // ---- jobs ----
