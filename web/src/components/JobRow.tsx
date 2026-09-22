@@ -1,5 +1,6 @@
 import { useStore } from "../store";
 import { api, toast } from "../api";
+import { useJobFfmpeg } from "../system";
 import { baseName, formatBytes, formatDuration } from "../utils";
 import type { Job } from "../types";
 
@@ -197,11 +198,48 @@ export function JobRow({ job }: { job: Job }) {
         )}
       </div>
 
+      {job.status === "running" && <JobFfmpeg jobId={job.id} />}
+
       <div className="job-bar">
         <i style={{ width: `${Math.round((job.progress || 0) * 100)}%` }} />
       </div>
       {job.error && <p className="job-error">{job.error}</p>}
     </article>
+  );
+}
+
+// JobFfmpeg reports the process this job is encoding with. The server tags
+// each running ffmpeg it reads out of the process table with the job that
+// started it, so this is that job's own process and not another ffmpeg that
+// happens to be running on the same machine.
+function JobFfmpeg({ jobId }: { jobId: string }) {
+  const { status, error, process: proc } = useJobFfmpeg(jobId);
+
+  // Before the platform reports the process, say why rather than showing a
+  // zero: no sample yet, no report at all, or a platform that has no /proc.
+  const facts = proc
+    ? [
+        `pid ${proc.pid}`,
+        proc.sampled ? `${Math.round(proc.cpu)}% of a core` : "measuring cpu\u2026",
+        formatBytes(proc.rss),
+        `${proc.threads} threads`,
+      ]
+    : [
+        error
+          ? "status unavailable"
+          : !status || status.os === "linux"
+            ? "starting\u2026"
+            : "not reported on this platform",
+      ];
+
+  return (
+    <div className="job-ffmpeg" title="The ffmpeg process this job is running">
+      <span className="job-ffmpeg-label">ffmpeg</span>
+      <span className="job-ffmpeg-value">{facts[0]}</span>
+      {facts.slice(1).map((fact) => (
+        <span key={fact}>{fact}</span>
+      ))}
+    </div>
   );
 }
 

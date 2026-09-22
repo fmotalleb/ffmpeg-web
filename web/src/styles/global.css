@@ -322,6 +322,21 @@ a.btn:hover {
 }
 .hw-row .hw-value.strong { color: var(--ink); }
 
+/* The process line under a job, so it reads as belonging to that job. */
+.hw-job { padding: 2px 0; }
+.hw-job + .hw-job {
+  margin-top: 5px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+.hw-row.hw-sub {
+  padding: 1px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.hw-row.hw-sub > span:first-child { color: var(--ink-dim); }
+.hw-row.hw-sub .hw-value { font-size: 11.5px; white-space: normal; }
+
 .hw-item {
   display: flex;
   align-items: baseline;
@@ -1120,6 +1135,25 @@ a.btn:hover {
 .job.failed .job-state { background: rgba(217, 112, 102, 0.18); color: var(--rose); }
 
 .job-error { margin: 0; font-size: 12px; color: var(--rose); overflow-wrap: anywhere; font-family: var(--mono); }
+
+.job-ffmpeg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-dim);
+}
+.job-ffmpeg-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+.job-ffmpeg-value { color: var(--ink); }
 
 .job-saving { color: var(--teal); }
 .job-saving.negative { color: var(--amber); }

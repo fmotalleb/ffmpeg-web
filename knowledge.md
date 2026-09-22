@@ -37,7 +37,7 @@ go run . -root ~/Videos -out ~/Videos/encoded
 | `store.go` | Atomic JSON queue file persistence (coalesced writes) |
 | `verify.go` | Output verification and post-queue hooks |
 | `frames.go` | Frame extraction and caching |
-| `system.go` | Hardware report for `/api/system`: CPU/memory/load, GPU devices, per-family hardware encoder availability, live ffmpeg process usage |
+| `system.go` | Hardware report for `/api/system`: CPU/memory/load, GPU devices, per-family hardware encoder availability, live ffmpeg process usage tagged with the job that owns each process |
 | `exec.go` | Process execution helpers |
 | `web/` | Frontend — vanilla JS/CSS/HTML, no framework, no build step |
 | `web/app.js` | Main application logic |
@@ -77,4 +77,5 @@ go run . -root ~/Videos -out ~/Videos/encoded
 - ffmpeg 6.0+ required for `-fpsmax` and `-fps_mode` flags.
 - Batch encoding does not probe at queue time (deferred to worker).
 - `/api/system` figures come from `/proc` (load, memory, per-process CPU): on a host without it those fields are zero (load uses -1) and the UI hides them. The ffmpeg CPU rate needs two samples, so the first response after a restart reports `sampled: false`.
+- A running job's ffmpeg is found by the PID the manager recorded in `Job.ffmpegPID` (runtime only, never written to `queue.json`), not by matching process names, so the job row reports its own encode even when the ffmpeg binary is renamed or wrapped.
 - Editing a running job requires cancelling it first.
