@@ -43,6 +43,17 @@ export function clampNum(v: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, v));
 }
 
+// The last playable instant of a video is one frame before its reported
+// duration; asking for a frame at exactly the end lands behind the last frame
+// and ffmpeg returns nothing. This clamps times to just inside the timeline (a
+// fixed margin when the frame rate is unknown) so the "last frame" request
+// always hits a real frame.
+export function seekLimit(duration: number, fps: number): number {
+  if (!duration || duration <= 0 || !isFinite(duration)) return 0;
+  const margin = fps > 0 ? 1 / fps : 0.1;
+  return Math.max(0, duration - Math.min(margin, duration / 2));
+}
+
 export function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
   let handle: ReturnType<typeof setTimeout>;
   return ((...args: unknown[]) => {

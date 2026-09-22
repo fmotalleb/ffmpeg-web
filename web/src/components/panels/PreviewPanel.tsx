@@ -8,6 +8,7 @@ import {
   formatPreciseTime,
   frameFileStamp,
   loadFrameOrClip,
+  seekLimit,
 } from "../../utils";
 
 function currentPreviewSubject() {
@@ -193,8 +194,9 @@ export function PreviewPanel() {
     const applyMeta = (duration: number, fps: number) => {
       setSubjectMeta({ duration, fps });
       const at = useStore.getState().previewTime;
-      if (duration > 0 && at > duration) {
-        useStore.getState().setPreviewTime(duration);
+      const limit = seekLimit(duration, fps);
+      if (duration > 0 && at > limit) {
+        useStore.getState().setPreviewTime(limit);
       }
     };
 
@@ -235,7 +237,13 @@ export function PreviewPanel() {
     }
     const t = previewTimeRef.current;
     const stage = diffStageRef.current;
-    const width = Math.min(1280, Math.round(stage?.clientWidth || 960)) || 960;
+    // The preview clip is re-encoded with libx264, which rejects odd widths
+    // ("width not divisible by 2"), and the stage width is not guaranteed to
+    // be even — round it down.
+    let width = Math.round(stage?.clientWidth || 960);
+    if (width % 2 !== 0) width--;
+    if (width < 2) width = 2;
+    width = Math.min(width, 1280);
     const seq = ++loadSeqRef.current;
     try {
       const [sourceURL, targetURL] = await Promise.all([
@@ -474,14 +482,17 @@ export function PreviewPanel() {
       const tag = (document.activeElement as HTMLElement)?.tagName || "";
       if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
       if (e.key === "ArrowRight") {
-        const fps = subjectMetaRef.current.fps > 0 ? subjectMetaRef.current.fps : 25;
+        const meta = subjectMetaRef.current;
+        const fps = meta.fps > 0 ? meta.fps : 25;
+        const limit = meta.duration > 0 ? seekLimit(meta.duration, meta.fps) : meta.duration;
         const t = previewTimeRef.current + (1 / fps);
-        useStore.getState().setPreviewTime(clampNum(t, 0, subjectMetaRef.current.duration || t));
+        useStore.getState().setPreviewTime(clampNum(t, 0, limit || t));
         e.preventDefault();
       } else if (e.key === "ArrowLeft") {
-        const fps = subjectMetaRef.current.fps > 0 ? subjectMetaRef.current.fps : 25;
+        const meta = subjectMetaRef.current;
+        const fps = meta.fps > 0 ? meta.fps : 25;
         const t = previewTimeRef.current - (1 / fps);
-        useStore.getState().setPreviewTime(clampNum(t, 0, subjectMetaRef.current.duration || t));
+        useStore.getState().setPreviewTime(clampNum(t, 0, meta.duration || t));
         e.preventDefault();
       } else if (e.key === " ") {
         togglePlay();
@@ -507,9 +518,11 @@ export function PreviewPanel() {
   }, [togglePlay]);
 
   const stepFrame = useCallback((delta: number) => {
-    const fps = subjectMetaRef.current.fps > 0 ? subjectMetaRef.current.fps : 25;
+    const meta = subjectMetaRef.current;
+    const fps = meta.fps > 0 ? meta.fps : 25;
+    const limit = meta.duration > 0 ? seekLimit(meta.duration, meta.fps) : meta.duration;
     const t = previewTimeRef.current + delta * (1 / fps);
-    useStore.getState().setPreviewTime(clampNum(t, 0, subjectMetaRef.current.duration || t));
+    useStore.getState().setPreviewTime(clampNum(t, 0, limit || t));
   }, []);
 
   const thumbSourceMode = useStore((s) => s.thumbSourceMode);
@@ -715,7 +728,7 @@ export function PreviewPanel() {
           <input
             type="range"
             min={0}
-            max={subjectMeta.duration || 0}
+            max={subjectMeta.duration ? seekLimit(subjectMeta.duration, subjectMeta.fps) : 0}
             step={0.1}
             value={previewTime}
             onChange={(e) => useStore.getState().setPreviewTime(Number(e.target.value) || 0)}
@@ -734,7 +747,10 @@ export function PreviewPanel() {
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               const parts = (e.target as HTMLInputElement).value.split(":").map(Number);
-              if (!parts.some(isNaN)) useStore.getState().setPreviewTime(parts.reduce((a, n) => a * 60 + n, 0));
+              if (parts.some(isNaN)) return;
+              const secs = parts.reduce((a, n) => a * 60 + n, 0);
+              const limit = subjectMeta.duration ? seekLimit(subjectMeta.duration, subjectMeta.fps) : secs;
+              useStore.getState().setPreviewTime(clampNum(secs, 0, limit));
             }}
             placeholder="0:00.00"
           />
@@ -757,8 +773,8 @@ export function PreviewPanel() {
         <button
           className="btn btn-quiet"
           onClick={() => {
-            const t = settings.trim.enabled && settings.trim.end > 0 ? settings.trim.end : subjectMeta.duration;
-            useStore.getState().setPreviewTime(t);
+            const raw = settings.trim.enabled && settings.trim.end > 0 ? settings.trim.end : subjectMeta.duration;
+            useStore.getState().setPreviewTime(seekLimit(raw, subjectMeta.fps));
           }}
         >
           Trim end

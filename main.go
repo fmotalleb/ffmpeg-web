@@ -556,7 +556,7 @@ func (s *server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("width"); v != "" {
 		width, _ = strconv.Atoi(v)
 	}
-	data, err := extractClip(r.Context(), s.ffmpeg, path, t, dur, width)
+	data, err := extractClip(r.Context(), s.ffmpeg, s.ffprobe, path, t, dur, width)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -585,7 +585,7 @@ func (s *server) handlePreviewClip(w http.ResponseWriter, r *http.Request) {
 	if dur <= 0 {
 		dur = defaultClipDur
 	}
-	data, err := encodePreviewClip(r.Context(), s.ffmpeg, path, body.Time, dur, body.Spec, s.workDir)
+	data, err := encodePreviewClip(r.Context(), s.ffmpeg, s.ffprobe, path, body.Time, dur, body.Spec, s.workDir)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
@@ -622,7 +622,7 @@ func (s *server) handleJobClip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := extractClip(r.Context(), s.ffmpeg, path, t, dur, width)
+	data, err := extractClip(r.Context(), s.ffmpeg, s.ffprobe, path, t, dur, width)
 	if err != nil {
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 		return

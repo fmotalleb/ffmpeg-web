@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../store";
-import { clampNum, formatPreciseTime, loadFrameOrClip } from "../utils";
+import { clampNum, formatPreciseTime, loadFrameOrClip, seekLimit } from "../utils";
 
 // How long a handle has to be held before the frame tooltip appears, and how
 // long we wait between frame requests while it is being dragged.
@@ -24,9 +24,11 @@ export function TrimRange() {
   const updateSettings = useStore((s) => s.updateSettings);
 
   const duration = source?.duration || 0;
+  const fps = source?.video?.fps || 0;
+  const endLimit = seekLimit(duration, fps);
   const path = source?.path ?? null;
   const start = Math.min(trim.start, Math.max(0, duration));
-  const end = trim.end > 0 ? Math.min(trim.end, duration) : duration;
+  const end = trim.end > 0 ? Math.min(trim.end, endLimit) : endLimit;
 
   // The edge frames belong to one file, so they are stored with the key of the
   // file they came from; a new file simply stops matching and shows empty
@@ -102,7 +104,10 @@ export function TrimRange() {
 
   const pick = (which: "start" | "end", raw: number) => {
     if (duration <= 0) return;
-    const v = clampNum(raw, 0, duration);
+    // The end handle can never go as far as the reported duration — its frame
+    // would sit behind the last frame of the video.
+    const hi = which === "end" ? endLimit : duration;
+    const v = clampNum(raw, 0, hi);
     if (which === "start") {
       updateSettings("trim.start", Math.round(Math.min(v, end - MIN_GAP) * 10) / 10);
     } else {
@@ -135,7 +140,7 @@ export function TrimRange() {
           type="range"
           className="dual-input"
           min={0}
-          max={duration || 1}
+          max={endLimit || 1}
           step={0.1}
           value={start}
           style={{ zIndex: start > duration / 2 ? 5 : 3 }}
@@ -150,7 +155,7 @@ export function TrimRange() {
           type="range"
           className="dual-input"
           min={0}
-          max={duration || 1}
+          max={endLimit || 1}
           step={0.1}
           value={end}
           style={{ zIndex: end < duration / 2 ? 5 : 3 }}
