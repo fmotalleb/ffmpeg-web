@@ -21,93 +21,25 @@ live hardware report:
   <img src="docs/panel.webp" alt="FFMPEG-Web web panel — settings, frame preview and hardware status" width="840" />
 </p>
 
-## Requirements
+## Getting started
 
-- Go 1.27 or newer
-- `ffmpeg` and `ffprobe` on `PATH` — ffmpeg 6.0+ for `-fpsmax` and `-fps_mode`
+You can use docker or prebuilt binaries.
 
-## Run
+Note that docker containers include a build of ffmpeg and fprobe v9
 
-```sh
-go build -o ffmpeg-web .
-./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
-```
-
-Then open <http://127.0.0.1:8723>.
-
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `-addr` | `127.0.0.1:8723` | listen address |
-| `-root` | `.` | the only folder the file picker can read from |
-| `-out` | `./encodes` | where finished files are written |
-| `-ffmpeg` / `-ffprobe` | `ffmpeg` / `ffprobe` | binary paths |
-| `-queue` | `<out>/queue.json` | where the queue is saved |
-| `-max-upload` | 16 GiB | upload size ceiling |
-| `-allow-commands` | off | permit the post-queue action to run a shell command |
-
-The web assets are embedded with `go:embed`, so the binary is all you need to
-deploy.
-
-## Container image
+There are multiple docker containers and you may chose one, by default, the `latest` and `<version>` tags
+are basic ffmpeg builds with no HW acceleration. you can see the list of all containers in [this](./docs/container-tags.md) file
 
 ```sh
-docker build -t ffmpeg-web .
-docker run --rm -p 8723:8723 -v "$PWD/videos:/media" ffmpeg-web
+docker run --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
+# or safer version, that runs as invoker, must be executed inside user's own directories to be able to create files under PWD
+docker run --user "$(id -u)" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
 ```
 
-The image is Alpine with ffmpeg installed, and the server runs as uid 10001, so
-the folders you mount have to be writable by that user
-(`chown -R 10001 "$PWD/videos"`). It starts with
-`-addr=0.0.0.0:8723 -root=/media -out=/data/encoded`; append your own flags to
-`docker run` to change them, and mount `/data` if you want the encodes and the
-queue file to survive a restart.
+Running this creates `./encoded` directory and the tool stores its data (queue, output files, presets ...) under this directory
+[read this section for more information on production deployments](#if-you-deploy-it-beyond-localhost)
 
-## Layout
-
-| File | Contains |
-| --- | --- |
-| `main.go` | HTTP routes, path sandboxing, uploads, SSE endpoint |
-| `jobs.go` | queue, ffmpeg supervision, progress parsing, event broker, recovery |
-| `store.go` | the JSON queue file: atomic, coalesced writes |
-| `verify.go` | output verification and post-queue hooks |
-| `ffmpeg.go` | `Spec` types and the argument builder (filters, rate control, two-pass) |
-| `probe.go` | ffprobe wrapper reduced to what the UI shows |
-| `presets.go` | built-in presets |
-| `system.go` | hardware report: CPU, memory, graphics devices, what each job's ffmpeg is using |
-| `web/` | the UI — no framework, no build step |
-
-## API
-
-```
-GET    /api/config              paths the server is using
-GET    /api/browse?path=        folder listing, videos only
-GET    /api/scan?path=&recursive=  every video under a folder
-GET    /api/probe/raw?path=     the full ffprobe report
-POST   /api/probe               {path} -> media info
-POST   /api/upload              multipart "file" -> media info
-GET    /api/presets             built-in presets
-GET    /api/jobs                queue snapshot
-POST   /api/jobs                a Spec -> queued job
-POST   /api/batch               queue a whole folder
-POST   /api/preview             the exact ffmpeg command a Spec produces
-GET    /api/jobs/{id}           one job
-GET    /api/jobs/{id}/log       tail of the ffmpeg output
-GET    /api/jobs/{id}/probe?which=source|output
-POST   /api/jobs/{id}/cancel    stop a running or waiting job
-POST   /api/jobs/{id}/retry     start it again from scratch
-POST   /api/jobs/{id}/move      {"delta":-1} or {"to":"top"}
-POST   /api/jobs/{id}/delete-source
-DELETE /api/jobs/{id}           drop it from the queue
-GET    /api/jobs/{id}/file      download the result
-GET    /api/queue              paused flag, settings, jobs
-POST   /api/queue/pause        {"paused":true}
-POST   /api/queue/settings     verification, auto-delete, post-queue action
-GET    /api/queue/export       download the queue as JSON
-POST   /api/queue/import       add jobs from an exported file
-GET    /api/system              CPU, memory, GPUs, live ffmpeg usage, per job
-GET    /api/ffmpeg/{pid}/log   tail of one ffmpeg run's log, by the pid shown in the UI
-GET    /api/events             SSE: snapshot, job, queue
-```
+## Sections
 
 ## Deciding what changes
 
@@ -120,6 +52,28 @@ change — `re-encoded`, `resized`, `trimmed`, `burned in`, `removed` and so on.
 Nothing is claimed without its "before": the picture line reads
 `1920×1080 → 1912×1076` rather than only the target. The rules live in
 `web/src/recap.ts`; the panel only renders them.
+
+<p align="center">
+  <img src="docs/summary.webp" alt="Summary tab showing before/after recap" width="840" />
+</p>
+
+### Video settings
+
+<p align="center">
+  <img src="docs/video.webp" alt="Video codec and rate control settings" width="840" />
+</p>
+
+### Dimensions and pixel format
+
+<p align="center">
+  <img src="docs/dimensions.webp" alt="Picture size and pixel format options" width="840" />
+</p>
+
+### Audio settings
+
+<p align="center">
+  <img src="docs/audio.webp" alt="Audio encoding settings" width="840" />
+</p>
 
 ## Batch encoding
 
@@ -214,6 +168,13 @@ artifacts without losing your place on the main comparison. Screenshots
 generates evenly-spaced thumbnails for both sides plus a clickable timeline
 strip; clicking any thumbnail jumps the comparison to that moment.
 
+<p align="center">
+  <img src="docs/preview-01.webp" alt="Frame inspector — source vs target comparison" width="840" />
+</p>
+<p align="center">
+  <img src="docs/preview-02.webp" alt="Frame inspector — comparison modes" width="840" />
+</p>
+
 Frames are cached both in the browser and on the server, keyed off the file's
 own identity (path, size, modification time) plus the timestamp, width, and
 any filters applied — so scrubbing back and forth doesn't re-run ffmpeg for a
@@ -241,7 +202,7 @@ with quote handling and passed as argv — nothing goes through a shell — and
 arguments the server sets itself (`-i`, `-pass`, `-y`, `-progress`) are
 rejected rather than silently overridden.
 
-## Notes on behaviour
+## Notes on behavior
 
 - One encode runs at a time. Raising that is a matter of running several
   `Manager.run` workers; ffmpeg already saturates the CPU on its own.
@@ -257,6 +218,92 @@ rejected rather than silently overridden.
   current encode.
 - Burned-in subtitles re-read the source file inside the filter graph, so paths
   with `:` or `'` are escaped.
+
+## Requirements (Development)
+
+- Go 1.27 or newer
+- `ffmpeg` and `ffprobe` on `PATH` — ffmpeg 6.0+ for `-fpsmax` and `-fps_mode`
+
+## Run
+
+```sh
+go build -o ffmpeg-web .
+./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
+```
+
+Then open <http://127.0.0.1:8723>.
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `-addr` | `127.0.0.1:8723` | listen address |
+| `-root` | `.` | the only folder the file picker can read from |
+| `-out` | `./encodes` | where finished files are written |
+| `-ffmpeg` / `-ffprobe` | `ffmpeg` / `ffprobe` | binary paths |
+| `-queue` | `<out>/queue.json` | where the queue is saved |
+| `-max-upload` | 16 GiB | upload size ceiling |
+| `-allow-commands` | off | permit the post-queue action to run a shell command |
+
+The web assets are embedded with `go:embed`, so the binary is all you need to
+deploy.
+
+## Container image
+
+```sh
+go tool goreleaser release --snapshot --clean
+docker run --rm -p 8723:8723 -v "$PWD/videos:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
+```
+
+The image is Alpine with ffmpeg installed, and the server runs as root.
+It starts with `-addr=0.0.0.0:8723 -root=/data -out=/data/encoded`;
+append your own flags to `docker run` to change them, and mount `/data` if you want the encodes and the
+queue file to survive a restart.
+
+## Layout
+
+| File | Contains |
+| --- | --- |
+| `main.go` | HTTP routes, path sandboxing, uploads, SSE endpoint |
+| `jobs.go` | queue, ffmpeg supervision, progress parsing, event broker, recovery |
+| `store.go` | the JSON queue file: atomic, coalesced writes |
+| `verify.go` | output verification and post-queue hooks |
+| `ffmpeg.go` | `Spec` types and the argument builder (filters, rate control, two-pass) |
+| `probe.go` | ffprobe wrapper reduced to what the UI shows |
+| `presets.go` | built-in presets |
+| `system.go` | hardware report: CPU, memory, graphics devices, what each job's ffmpeg is using |
+| `web/` | the UI — no framework, no build step |
+
+## API
+
+```
+GET    /api/config              paths the server is using
+GET    /api/browse?path=        folder listing, videos only
+GET    /api/scan?path=&recursive=  every video under a folder
+GET    /api/probe/raw?path=     the full ffprobe report
+POST   /api/probe               {path} -> media info
+POST   /api/upload              multipart "file" -> media info
+GET    /api/presets             built-in presets
+GET    /api/jobs                queue snapshot
+POST   /api/jobs                a Spec -> queued job
+POST   /api/batch               queue a whole folder
+POST   /api/preview             the exact ffmpeg command a Spec produces
+GET    /api/jobs/{id}           one job
+GET    /api/jobs/{id}/log       tail of the ffmpeg output
+GET    /api/jobs/{id}/probe?which=source|output
+POST   /api/jobs/{id}/cancel    stop a running or waiting job
+POST   /api/jobs/{id}/retry     start it again from scratch
+POST   /api/jobs/{id}/move      {"delta":-1} or {"to":"top"}
+POST   /api/jobs/{id}/delete-source
+DELETE /api/jobs/{id}           drop it from the queue
+GET    /api/jobs/{id}/file      download the result
+GET    /api/queue              paused flag, settings, jobs
+POST   /api/queue/pause        {"paused":true}
+POST   /api/queue/settings     verification, auto-delete, post-queue action
+GET    /api/queue/export       download the queue as JSON
+POST   /api/queue/import       add jobs from an exported file
+GET    /api/system              CPU, memory, GPUs, live ffmpeg usage, per job
+GET    /api/ffmpeg/{pid}/log   tail of one ffmpeg run's log, by the pid shown in the UI
+GET    /api/events             SSE: snapshot, job, queue
+```
 
 ## Development
 
