@@ -1,6 +1,6 @@
 import { useStore } from "../store";
 import { api, toast } from "../api";
-import { useJobFfmpeg } from "../system";
+import { POLL_MS, useJobFfmpeg } from "../system";
 import { baseName, formatBytes, formatDuration } from "../utils";
 import type { Job } from "../types";
 
@@ -213,33 +213,75 @@ export function JobRow({ job }: { job: Job }) {
 // started it, so this is that job's own process and not another ffmpeg that
 // happens to be running on the same machine.
 function JobFfmpeg({ jobId }: { jobId: string }) {
-  const { status, error, process: proc } = useJobFfmpeg(jobId);
+  const { status, error, process: proc, cpu } = useJobFfmpeg(jobId);
 
-  // Before the platform reports the process, say why rather than showing a
-  // zero: no sample yet, no report at all, or a platform that has no /proc.
-  const facts = proc
-    ? [
-        `pid ${proc.pid}`,
-        proc.sampled ? `${Math.round(proc.cpu)}% of a core` : "measuring cpu\u2026",
-        formatBytes(proc.rss),
-        `${proc.threads} threads`,
-      ]
-    : [
-        error
-          ? "status unavailable"
-          : !status || status.os === "linux"
-            ? "starting\u2026"
-            : "not reported on this platform",
-      ];
+  if (!proc) {
+    // Before the platform reports the process, say why rather than showing a
+    // zero: no sample yet, no report at all, or a platform that has no /proc.
+    const note = error
+      ? "status unavailable"
+      : !status || status.os === "linux"
+        ? "starting\u2026"
+        : "not reported on this platform";
+    return (
+      <div className="job-ffmpeg">
+        <span className="job-ffmpeg-label">ffmpeg</span>
+        <span className="job-ffmpeg-value">{note}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="job-ffmpeg" title="The ffmpeg process this job is running">
       <span className="job-ffmpeg-label">ffmpeg</span>
-      <span className="job-ffmpeg-value">{facts[0]}</span>
-      {facts.slice(1).map((fact) => (
-        <span key={fact}>{fact}</span>
-      ))}
+      <span className="job-ffmpeg-value">pid {proc.pid}</span>
+      <span>{proc.sampled ? `${Math.round(proc.cpu)}% of a core` : "measuring cpu\u2026"}</span>
+      <CpuSparkline values={cpu} />
+      <span>{formatBytes(proc.rss)}</span>
+      <span>{proc.threads} threads</span>
     </div>
+  );
+}
+
+// CpuSparkline draws where this job's CPU has been over the last couple of
+// minutes. The scale covers whole cores, so the dashed line is one core and a
+// curve that rises above it is the encoder spreading over several.
+function CpuSparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+
+  const width = 56;
+  const height = 14;
+  const pad = 1.5;
+  const inner = height - pad * 2;
+  const seconds = Math.round((values.length * POLL_MS) / 1000);
+  const latest = values[values.length - 1];
+  const peak = Math.max(...values);
+  const scale = Math.max(100, Math.ceil(peak / 100) * 100);
+  const step = (width - pad * 2) / (values.length - 1);
+  const y = (value: number) => pad + inner - (Math.min(value, scale) / scale) * inner;
+  const points = values.map((value, i) => `${(pad + i * step).toFixed(1)} ${y(value).toFixed(1)}`);
+
+  return (
+    <svg
+      className="job-spark"
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={`CPU of this job's ffmpeg over the last ${seconds} seconds`}
+    >
+      <title>
+        {`${Math.round(latest)}% of a core now, peak ${Math.round(peak)}% over the last ${seconds}s`}
+      </title>
+      <polygon
+        className="job-spark-fill"
+        points={`${pad} ${height - pad} ${points.join(" ")} ${width - pad} ${height - pad}`}
+      />
+      {scale > 100 && (
+        <line className="job-spark-core" x1={pad} x2={width - pad} y1={y(100)} y2={y(100)} />
+      )}
+      <polyline className="job-spark-line" points={points.join(" ")} />
+    </svg>
   );
 }
 
