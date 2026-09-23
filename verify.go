@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // verifyOutput re-probes a finished file and checks it is actually playable:
@@ -83,6 +84,7 @@ func formatSeconds(s float64) string {
 // ---- post-queue hooks ----
 
 type hookRunner struct {
+	log           *zap.Logger
 	allowCommands bool
 	outDir        string
 }
@@ -97,7 +99,7 @@ func (h *hookRunner) Run(hook Hook, summary map[string]any) {
 	case "command":
 		h.command(hook.Command, summary)
 	default:
-		log.Printf("unknown post-queue action %q", hook.Type)
+		h.log.Warn("unknown post-queue action", zap.String("type", hook.Type))
 	}
 }
 
@@ -110,17 +112,17 @@ func (h *hookRunner) webhook(url string, summary map[string]any) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		log.Printf("post-queue webhook: %v", err)
+		h.log.Error("post-queue webhook could not be built", zap.String("url", url), zap.Error(err))
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("post-queue webhook: %v", err)
+		h.log.Error("post-queue webhook failed", zap.String("url", url), zap.Error(err))
 		return
 	}
 	res.Body.Close()
-	log.Printf("post-queue webhook returned %s", res.Status)
+	h.log.Info("post-queue webhook returned", zap.String("status", res.Status))
 }
 
 func (h *hookRunner) command(line string, summary map[string]any) {
@@ -128,7 +130,7 @@ func (h *hookRunner) command(line string, summary map[string]any) {
 		return
 	}
 	if !h.allowCommands {
-		log.Printf("post-queue command is set but the server was started without -allow-commands")
+		h.log.Warn("post-queue command is set but the server was started without -allow-commands")
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -148,8 +150,9 @@ func (h *hookRunner) command(line string, summary map[string]any) {
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("post-queue command failed: %v: %s", err, strings.TrimSpace(string(out)))
+		h.log.Error("post-queue command failed",
+			zap.Error(err), zap.String("output", strings.TrimSpace(string(out))))
 		return
 	}
-	log.Printf("post-queue command finished: %s", strings.TrimSpace(string(out)))
+	h.log.Info("post-queue command finished", zap.String("output", strings.TrimSpace(string(out))))
 }

@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const snapshotVersion = 1
@@ -49,12 +50,15 @@ func defaultSettings() QueueSettings {
 // leave a half-written queue behind.
 type Store struct {
 	path  string
+	log   *zap.Logger
 	mu    sync.Mutex
 	dirty bool
 	next  func() Snapshot
 }
 
-func NewStore(path string) *Store { return &Store{path: path} }
+func NewStore(path string, log *zap.Logger) *Store {
+	return &Store{path: path, log: log}
+}
 
 // Start begins the flush loop. snapshot is called whenever a write is due.
 func (s *Store) Start(snapshot func() Snapshot) {
@@ -69,7 +73,7 @@ func (s *Store) Start(snapshot func() Snapshot) {
 			s.mu.Unlock()
 			if due {
 				if err := s.write(s.next()); err != nil {
-					log.Printf("could not save the queue: %v", err)
+					s.log.Error("could not save the queue", zap.Error(err))
 				}
 			}
 		}
@@ -88,7 +92,7 @@ func (s *Store) Flush() {
 		return
 	}
 	if err := s.write(s.next()); err != nil {
-		log.Printf("could not save the queue: %v", err)
+		s.log.Error("could not save the queue", zap.Error(err))
 	}
 }
 
@@ -122,7 +126,8 @@ func (s *Store) Load() (Snapshot, error) {
 		// A damaged queue file should not stop the server from starting.
 		backup := fmt.Sprintf("%s.broken-%d", s.path, time.Now().Unix())
 		_ = os.Rename(s.path, backup)
-		log.Printf("queue file was unreadable, moved it to %s", backup)
+		s.log.Warn("queue file was unreadable, moved it aside",
+			zap.String("backup", backup), zap.Error(err))
 		//nolint:nilerr // starting with an empty queue beats refusing to start
 		return Snapshot{Settings: defaultSettings()}, nil
 	}

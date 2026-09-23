@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Preset is a named starting point. The UI merges it into the current settings;
@@ -170,12 +171,13 @@ func builtinPresetByName(name string) (Preset, bool) {
 // saving a preset with a name that already exists replaces it in place.
 type presetStore struct {
 	path string
+	log  *zap.Logger
 	mu   sync.Mutex
 	user []Preset
 }
 
-func newPresetStore(path string) *presetStore {
-	return &presetStore{path: path}
+func newPresetStore(path string, log *zap.Logger) *presetStore {
+	return &presetStore{path: path, log: log}
 }
 
 func (s *presetStore) list() []Preset {
@@ -268,13 +270,14 @@ func (s *presetStore) load() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
-		log.Printf("could not read presets: %v", err)
+		s.log.Error("could not read presets", zap.String("path", s.path), zap.Error(err))
 		return
 	}
 	if err := json.Unmarshal(body, &s.user); err != nil {
 		backup := fmt.Sprintf("%s.broken-%d", s.path, time.Now().Unix())
 		_ = os.Rename(s.path, backup)
-		log.Printf("presets file was unreadable, moved it to %s", backup)
+		s.log.Warn("presets file was unreadable, moved it aside",
+			zap.String("backup", backup), zap.Error(err))
 		s.user = nil
 	}
 }
