@@ -39,28 +39,93 @@ builds:
       - arm64
 
 dockers_v2:
-  - id: ffmpeg-web
+  - id: scratch
     images:
-      - ghcr.io/fmotalleb/ffmpeg-web
+      - ghcr.io/fmtoalleb/ffmpeg-web
     ids:
-      - ffmpeg-web
+      - transcoder
     platforms:
       - linux/amd64
       - linux/arm64
     tags:
-      - "{{ .Tag }}"
-      - "{{ if not .IsNightly }}latest{{ end }}"
+      - "{{ .Tag }}-scratch"
     dockerfile: Dockerfile
     build_args:
       FFMPEG_VERSION: "9"
       FFMPEG_VARIANT: "scratch"
-    labels:
-      org.opencontainers.image.title: "{{ .ProjectName }}"
-      org.opencontainers.image.version: "{{ .Version }}"
-      org.opencontainers.image.revision: "{{ .FullCommit }}"
-      org.opencontainers.image.created: "{{ .Date }}"
-      org.opencontainers.image.source: "https://github.com/fmotalleb/ffmpeg-web"
-      org.opencontainers.image.description: "HandBrake-style web UI over FFmpeg"
+
+  - id: alpine
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - transcoder
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}-alpine"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "alpine"
+
+  - id: ubuntu
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - transcoder
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}-ubuntu"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "ubuntu"
+
+  - id: ubuntu-edge
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - transcoder
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}-ubuntu-edge"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "ubuntu-edge"
+
+  - id: vaapi
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - transcoder
+    platforms:
+      - linux/amd64
+    tags:
+      - "{{ .Tag }}-vaapi"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "vaapi"
+
+  - id: nvidia
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - transcoder
+    platforms:
+      - linux/amd64
+    tags:
+      - "{{ .Tag }}-nvidia"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "nvidia"
 
 archives:
   - id: default
