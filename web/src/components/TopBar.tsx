@@ -43,7 +43,7 @@ export function TopBar() {
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark" aria-hidden="true" />
-          <span className="brand-name">Transcoder</span>
+          <span className="brand-name">FFMPEG-Web</span>
         </div>
         <div className="topbar-actions">
           <button className="btn" onClick={() => setBrowserOpen(true)}>

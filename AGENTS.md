@@ -3,7 +3,7 @@
 This file gives Freebuff context about your project: goals, commands, conventions, and gotchas.
 
 ## Quickstart
-- Setup: `go generate ./... && go build -o transcoder .` (requires Go 1.27+, Node.js 22+, ffmpeg/ffprobe on PATH)
+- Setup: `go generate ./... && go build -o ffmpeg-web .` (requires Go 1.27+, Node.js 22+, ffmpeg/ffprobe on PATH)
 - Dev frontend: `cd web && npm run dev` (Vite dev server at http://localhost:5173)
 - Dev backend: `go run . -root ~/Videos -out ~/Videos/encoded` then open http://127.0.0.1:8723
 - Test: `cd web && npm run build` then `go vet ./...`, `go build ./...` and `golangci-lint run`
