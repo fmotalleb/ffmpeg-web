@@ -12,8 +12,8 @@ project_name: ffmpeg-web
 
 before:
   hooks:
-    - go generate ./...
     - go mod tidy
+    - go generate ./...
 
 builds:
   - id: ffmpeg-web
@@ -24,7 +24,12 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s
+      - -w
+      - "-X github.com/FMotalleb/go-tools/git.Version={{.Version}}"
+      - "-X github.com/FMotalleb/go-tools/git.Commit={{.ShortCommit}}"
+      - "-X github.com/FMotalleb/go-tools/git.Date={{.Date}}"
+      - "-X github.com/FMotalleb/go-tools/git.Branch={{.Branch}}"
     goos:
       - linux
       - darwin
