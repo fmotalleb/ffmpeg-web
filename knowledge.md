@@ -2,16 +2,16 @@
 
 ## What This Is
 
-**Transcoder** — a single-binary Go web app that provides a HandBrake-style browser UI over ffmpeg. No external dependencies (pure stdlib). Web assets are embedded via `go:embed`.
+**FFMPEG Web** — a single-binary Go web app that provides a HandBrake-style browser UI over ffmpeg. No external dependencies (pure stdlib). Web assets are embedded via `go:embed`.
 
 ## Quickstart
 
 ```sh
 # Build
-go build -o transcoder .
+go build -o ffmpeg-web .
 
 # Run
-./transcoder -root ~/Videos -out ~/Videos/encoded
+./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
 # Then open http://127.0.0.1:8723
 
 # Run directly (no build step)

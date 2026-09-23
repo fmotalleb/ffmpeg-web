@@ -1,6 +1,6 @@
 
 
-<img src="docs/logo.svg" alt="Transcoder logo" width="96" align="left" />
+<img src="docs/logo.svg" alt="FFMPEG-Web logo" width="96" align="left" />
 
 A single Go binary that serves a browser UI for transcoding video. Presets,
 a settings panel per topic, batch encoding of whole folders, a queue that
@@ -18,7 +18,7 @@ The main panel with the queue, the settings panes, the frame inspector and the
 live hardware report:
 
 <p align="center">
-  <img src="docs/panel.webp" alt="Transcoder web panel — settings, frame preview and hardware status" width="840" />
+  <img src="docs/panel.webp" alt="FFMPEG-Web web panel — settings, frame preview and hardware status" width="840" />
 </p>
 
 ## Requirements
@@ -29,8 +29,8 @@ live hardware report:
 ## Run
 
 ```sh
-go build -o transcoder .
-./transcoder -root ~/Videos -out ~/Videos/encoded
+go build -o ffmpeg-web .
+./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
 ```
 
 Then open <http://127.0.0.1:8723>.

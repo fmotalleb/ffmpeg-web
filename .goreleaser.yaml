@@ -1,9 +1,11 @@
 # GoReleaser configuration. Push a tag (`git tag v1.2.3 && git push --tags`)
-# and .github/workflows/release.yml runs `goreleaser release --clean`, which
-# cross-compiles the server, packs archives and publishes them on the release.
+# and .github/workflows/release.yml runs `goreleaser release --clean`,
+# which cross-compiles the server, packs archives and publishes them
+# together with the multi-platform container image.
 #
 # Check it locally with `goreleaser check`, or build the archives without
 # publishing using `goreleaser build --snapshot --clean`.
+
 version: 2
 
 project_name: ffmpeg-web
@@ -14,7 +16,7 @@ before:
     - go mod tidy
 
 builds:
-  - id: transcoder
+  - id: ffmpeg-web
     main: .
     binary: ffmpeg-web
     env:
@@ -30,6 +32,30 @@ builds:
     goarch:
       - amd64
       - arm64
+
+dockers_v2:
+  - id: ffmpeg-web
+    images:
+      - ghcr.io/fmtoalleb/ffmpeg-web
+    ids:
+      - ffmpeg-web
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    tags:
+      - "{{ .Tag }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
+    dockerfile: Dockerfile
+    build_args:
+      FFMPEG_VERSION: "9"
+      FFMPEG_VARIANT: "scratch"
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.source: "https://github.com/fmtoalleb/ffmpeg-web"
+      org.opencontainers.image.description: "HandBrake-style web UI over FFmpeg"
 
 archives:
   - id: default
@@ -66,6 +92,4 @@ release:
   draft: false
   prerelease: auto
   footer: |
-    **Full changelog**: https://github.com/fmotalleb/ffmpeg-web/compare/{{ .PreviousTag }}...{{ .Tag }}
-
-    ffmpeg and ffprobe have to be on PATH; the container image already has them.
+    **Full changelog**: https://github.com/fmtoalleb/ffmpeg-web/compare/{{ .PreviousTag }}...{{ .Tag }}

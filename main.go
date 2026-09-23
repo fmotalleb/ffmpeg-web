@@ -123,7 +123,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("transcoder %s", version)
+		log.Printf("ffmpeg-web %s", version)
 		log.Printf("sources   %s", mediaRoot)
 		log.Printf("encodes   %s", outDir)
 		log.Printf("queue     %s (%d jobs)", queuePath, len(snap.Jobs))
