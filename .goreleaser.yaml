@@ -36,7 +36,7 @@ builds:
 dockers_v2:
   - id: ffmpeg-web
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
       - ffmpeg-web
     platforms:
@@ -54,7 +54,7 @@ dockers_v2:
       org.opencontainers.image.version: "{{ .Version }}"
       org.opencontainers.image.revision: "{{ .FullCommit }}"
       org.opencontainers.image.created: "{{ .Date }}"
-      org.opencontainers.image.source: "https://github.com/fmtoalleb/ffmpeg-web"
+      org.opencontainers.image.source: "https://github.com/fmotalleb/ffmpeg-web"
       org.opencontainers.image.description: "HandBrake-style web UI over FFmpeg"
 
 archives:
@@ -92,4 +92,4 @@ release:
   draft: false
   prerelease: auto
   footer: |
-    **Full changelog**: https://github.com/fmtoalleb/ffmpeg-web/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full changelog**: https://github.com/fmotalleb/ffmpeg-web/compare/{{ .PreviousTag }}...{{ .Tag }}
