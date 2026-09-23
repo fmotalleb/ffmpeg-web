@@ -21,6 +21,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/fmotalleb/go-tools/git"
 )
 
 //go:embed web-dist
@@ -123,7 +125,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("ffmpeg-web %s", version)
+		log.Printf("ffmpeg-web %s", git.String())
 		log.Printf("sources   %s", mediaRoot)
 		log.Printf("encodes   %s", outDir)
 		log.Printf("queue     %s (%d jobs)", queuePath, len(snap.Jobs))
