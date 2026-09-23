@@ -41,9 +41,9 @@ builds:
 dockers_v2:
   - id: scratch
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
       - linux/arm64
@@ -56,9 +56,9 @@ dockers_v2:
 
   - id: alpine
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
       - linux/arm64
@@ -71,9 +71,9 @@ dockers_v2:
 
   - id: ubuntu
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
       - linux/arm64
@@ -86,9 +86,9 @@ dockers_v2:
 
   - id: ubuntu-edge
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
       - linux/arm64
@@ -101,9 +101,9 @@ dockers_v2:
 
   - id: vaapi
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
     tags:
@@ -115,9 +115,9 @@ dockers_v2:
 
   - id: nvidia
     images:
-      - ghcr.io/fmtoalleb/ffmpeg-web
+      - ghcr.io/fmotalleb/ffmpeg-web
     ids:
-      - transcoder
+      - ffmpeg-web
     platforms:
       - linux/amd64
     tags:
