@@ -13,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fmotalleb/go-tools/log"
+	"go.uber.org/zap"
 )
 
 type JobStatus string
@@ -83,6 +86,7 @@ type Manager struct {
 	paused   bool
 	settings QueueSettings
 
+	log     *zap.Logger
 	ready   chan struct{}
 	broker  *Broker
 	store   *Store
@@ -95,10 +99,11 @@ type Manager struct {
 	ranSinceIdle bool
 }
 
-func NewManager(ffmpeg, ffprobe, workDir string, broker *Broker, store *Store, hooks *hookRunner) *Manager {
+func NewManager(ffmpeg, ffprobe, workDir string, broker *Broker, store *Store, hooks *hookRunner, log *zap.Logger) *Manager {
 	m := &Manager{
 		jobs:     map[string]*Job{},
 		settings: defaultSettings(),
+		log:      log,
 		ready:    make(chan struct{}, 1),
 		broker:   broker,
 		store:    store,
@@ -607,7 +612,7 @@ func (m *Manager) run(job *Job) {
 
 	// Batch jobs are queued without probing, so read the source now.
 	if job.Duration == 0 || job.SourceSize == 0 {
-		if info, err := probe(ctx, m.ffprobe, source); err == nil {
+		if info, err := probe(log.WithLogger(ctx, m.log), m.ffprobe, source); err == nil {
 			m.mu.Lock()
 			job.Duration = info.Duration
 			job.SourceSize = info.Size
@@ -685,7 +690,7 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 	m.mu.Unlock()
 
 	if done && settings.VerifyOutput {
-		note, err := verifyOutput(context.Background(), m.ffmpeg, m.ffprobe, output, expected)
+		note, err := verifyOutput(log.WithLogger(context.Background(), m.log), m.ffmpeg, m.ffprobe, output, expected)
 		m.mu.Lock()
 		job.VerifyNote = note
 		if err != nil {

@@ -2,7 +2,10 @@ module github.com/fmotalleb/ffmpeg-web
 
 go 1.27
 
-require github.com/fmotalleb/go-tools v0.1.81
+require (
+	github.com/fmotalleb/go-tools v0.1.81
+	go.uber.org/zap v1.28.0
+)
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -17,6 +20,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
+	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

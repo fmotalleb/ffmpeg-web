@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,13 +23,12 @@ import (
 	"time"
 
 	"github.com/fmotalleb/go-tools/git"
+	"github.com/fmotalleb/go-tools/log"
+	"go.uber.org/zap"
 )
 
 //go:embed web-dist
 var webAssets embed.FS
-
-// version is stamped in at build time by GoReleaser and the Dockerfile.
-var version = "dev"
 
 // processStart is when this server came up. A per-run ffmpeg log file older
 // than this belongs to an earlier boot, so its pid must not be served — the
@@ -58,11 +57,24 @@ type server struct {
 	presets   *presetStore
 	frames    *frameCache
 	monitor   *systemMonitor
+	log       *zap.Logger
 	maxUpload int64
 	allowCmds bool
 }
 
 func main() {
+	logger := log.
+		NewBuilder().
+		FromEnv().
+		InitialFields(map[string]any{
+			"version": git.GetVersion(),
+		}).
+		MustBuild()
+	ctx := log.WithLogger(
+		context.Background(),
+		logger,
+	)
+
 	addr := flag.String("addr", "127.0.0.1:8723", "address to listen on")
 	root := flag.String("root", ".", "directory the browser is allowed to read sources from")
 	out := flag.String("out", "./encodes", "directory finished files are written to")
@@ -72,6 +84,12 @@ func main() {
 	maxUpload := flag.Int64("max-upload", 16<<30, "largest accepted upload in bytes")
 	allowCmds := flag.Bool("allow-commands", false, "let the post-queue action run a shell command")
 	flag.Parse()
+
+	must := func(err error) {
+		if err != nil {
+			logger.Fatal("startup failed", zap.Error(err))
+		}
+	}
 
 	mediaRoot, err := filepath.Abs(*root)
 	must(err)
@@ -86,7 +104,8 @@ func main() {
 
 	for _, bin := range []string{*ffmpegBin, *ffprobeBin} {
 		if _, err := exec.LookPath(bin); err != nil {
-			log.Fatalf("%s not found on PATH — install ffmpeg, or pass -ffmpeg/-ffprobe", bin)
+			logger.Fatal("required binary not found on PATH — install ffmpeg, or pass -ffmpeg/-ffprobe",
+				zap.String("binary", bin))
 		}
 	}
 
@@ -96,24 +115,25 @@ func main() {
 	if queuePath == "" {
 		queuePath = filepath.Join(outDir, "queue.json")
 	}
-	store := NewStore(queuePath)
+	store := NewStore(queuePath, logger.Named("store"))
 	snap, err := store.Load()
 	must(err)
 
 	broker := NewBroker()
-	hooks := &hookRunner{allowCommands: *allowCmds, outDir: outDir}
-	manager := NewManager(*ffmpegBin, *ffprobeBin, workDir, broker, store, hooks)
+	hooks := &hookRunner{log: logger.Named("hooks"), allowCommands: *allowCmds, outDir: outDir}
+	manager := NewManager(*ffmpegBin, *ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
 	recovered := manager.Restore(snap)
 	store.Start(manager.Snapshot)
 	manager.Start()
 
-	presetStore := newPresetStore(filepath.Join(outDir, "presets.json"))
+	presetStore := newPresetStore(filepath.Join(outDir, "presets.json"), logger.Named("presets"))
 	presetStore.load()
 
 	srv := &server{
 		mediaRoot: mediaRoot, outDir: outDir, uploadDir: uploadDir, workDir: workDir,
 		ffmpeg: *ffmpegBin, ffprobe: *ffprobeBin,
 		broker: broker, jobs: manager, store: store, presets: presetStore, frames: newFrameCache(256 << 20),
+		log:       logger.Named("web"),
 		monitor:   newSystemMonitor(),
 		maxUpload: *maxUpload, allowCmds: *allowCmds,
 	}
@@ -122,43 +142,43 @@ func main() {
 		Addr:              *addr,
 		Handler:           srv.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext: func(_ net.Listener) context.Context {
+			return log.WithLogger(ctx, srv.log)
+		},
 	}
 
 	go func() {
-		log.Printf("ffmpeg-web %s", git.String())
-		log.Printf("sources   %s", mediaRoot)
-		log.Printf("encodes   %s", outDir)
-		log.Printf("queue     %s (%d jobs)", queuePath, len(snap.Jobs))
+		logger.Info("ffmpeg-web", zap.String("version", git.String()))
+		logger.Info("sources", zap.String("path", mediaRoot))
+		logger.Info("encodes", zap.String("path", outDir))
+		logger.Info("queue", zap.String("file", queuePath), zap.Int("jobs", len(snap.Jobs)))
 		if recovered > 0 {
-			log.Printf("recovered %d interrupted job(s) — their partial output was deleted and they will run again", recovered)
+			logger.Info("recovered interrupted jobs — their partial output was deleted and they will run again",
+				zap.Int("count", recovered))
 		}
-		log.Printf("listening http://%s", *addr)
+		logger.Info("listening", zap.String("addr", *addr))
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
+			logger.Fatal("http server failed", zap.Error(err))
 		}
 	}()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
-	log.Println("shutting down, saving the queue")
+	logger.Info("shutting down, saving the queue")
 	store.Flush()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = httpSrv.Shutdown(ctx)
-}
-
-func must(err error) {
-	if err != nil {
-		log.Fatal(err)
-	}
+	_ = httpSrv.Shutdown(shutdownCtx)
 }
 
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 
 	static, err := fs.Sub(webAssets, "web-dist")
-	must(err)
+	if err != nil { // cannot happen: the assets are embedded at build time
+		panic(fmt.Errorf("cannot unpack embedded web assets: %w", err))
+	}
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
 
 	mux.HandleFunc("GET /api/config", s.handleConfig)
@@ -210,7 +230,9 @@ func (s *server) routes() http.Handler {
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/events" {
-			log.Printf("%s %s", r.Method, r.URL.Path)
+			log.Of(r.Context()).Info("request",
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.Path))
 		}
 		next.ServeHTTP(w, r)
 	})
