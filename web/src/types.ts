@@ -5,6 +5,8 @@ export interface Spec {
   webOptimize: boolean;
   /** Replace the source file with the result once it is done and checked. */
   moveInPlace: boolean;
+  /** ffmpeg verbosity for this run's log; empty means "error". */
+  logLevel: string;
   video: VideoSpec;
   audio: AudioSpec;
   picture: PictureSpec;

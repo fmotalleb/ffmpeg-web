@@ -17,6 +17,7 @@ function defaultSettings(): Spec {
     container: "mp4",
     webOptimize: true,
     moveInPlace: false,
+    logLevel: "error",
     video: {
       encoder: "x264",
       library: "sw",
