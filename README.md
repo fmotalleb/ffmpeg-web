@@ -214,8 +214,10 @@ rejected rather than silently overridden.
 - While a job runs, the finished size is projected from bytes written divided by
   progress, so the queue shows where a file is heading before it lands.
 - Waiting jobs can be moved up, down or to the top; the running job is not
-  interrupted by reordering. Pause stops new jobs starting, it does not kill the
-  current encode.
+  interrupted by reordering. Pause holds the whole pipeline still: the running
+  encode is frozen in place (SIGSTOP on Unix, thread suspension on Windows)
+  and no new job starts. Resume continues it from exactly where it stopped —
+  nothing is killed.
 - Burned-in subtitles re-read the source file inside the filter graph, so paths
   with `:` or `'` are escaped.
 

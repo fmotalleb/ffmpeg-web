@@ -18,6 +18,14 @@ export function JobRow({ job }: { job: Job }) {
   const setProbe = useStore((s) => s.setProbe);
   const setLogView = useStore((s) => s.setLogView);
   const queueSettings = useStore((s) => s.queue.settings);
+  const queuePaused = useStore((s) => s.queue.paused);
+
+  // A running encode under a paused queue is frozen in place: its ffmpeg is
+  // stopped, so say so instead of implying it is still making progress.
+  const stateLabel =
+    job.status === "running" && queuePaused
+      ? "paused"
+      : STATUS_LABELS[job.status] || job.status;
 
   const threshold = queueSettings?.shrinkThreshold || 20;
 
@@ -57,11 +65,14 @@ export function JobRow({ job }: { job: Job }) {
 
   return (
     <article
-      className={`job ${job.status}${job.sourceDeleted ? " deleted-source" : ""}`}
+      className={`job ${job.status}${
+        job.status === "running" && queuePaused ? " frozen" : ""
+      }${job.sourceDeleted ? " deleted-source" : ""}`}
     >
       <div className="job-head">
         <span className="job-state">
-          {STATUS_LABELS[job.status] || job.status}
+          {job.status === "running" && queuePaused && "\u23f8 "}
+          {stateLabel}
         </span>
         <span className="job-title">{job.label || baseName(job.output)}</span>
         {job.status === "queued" && (

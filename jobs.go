@@ -319,14 +319,46 @@ func (m *Manager) Paused() bool {
 	return m.paused
 }
 
+// SetPaused holds the queue still or lets it run on. Pausing also freezes the
+// encode already in flight — the point of pausing is to stop burning CPU now,
+// not just to wait before the next job — so the signal goes out under the lock
+// that guards the running job's pid: a process starting at the same moment
+// either gets stopped here, or sees the new paused state in exec and stops
+// itself, and no resume can slip between those two.
 func (m *Manager) SetPaused(p bool) {
 	m.mu.Lock()
 	m.paused = p
+	for _, j := range m.jobs {
+		if j.Status == StatusRunning && j.FfmpegPID != 0 {
+			m.setFrozen(j.FfmpegPID, p)
+		}
+	}
 	m.mu.Unlock()
 	m.save()
 	m.broker.Publish("queue", map[string]any{"paused": p})
 	if !p {
 		m.nudge()
+	}
+}
+
+// setFrozen stops or wakes one encode process. Best effort: a process that
+// has just exited cannot be signaled, and there is nothing to do about that.
+func (m *Manager) setFrozen(pid int, frozen bool) {
+	if err := setProcessFrozen(pid, frozen); err != nil {
+		m.log.Debug("could not signal ffmpeg", zap.Int("pid", pid),
+			zap.Bool("frozen", frozen), zap.Error(err))
+	}
+}
+
+// thawFrozen wakes every stopped encode. Shutdown calls it: a process left
+// frozen would stay frozen forever, because nothing left can signal it.
+func (m *Manager) thawFrozen() {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, j := range m.jobs {
+		if j.Status == StatusRunning && j.FfmpegPID != 0 {
+			m.setFrozen(j.FfmpegPID, false)
+		}
 	}
 }
 
@@ -881,6 +913,13 @@ func (m *Manager) exec(ctx context.Context, job *Job, target, passLog string, pa
 	}
 	m.mu.Lock()
 	job.FfmpegPID = cmd.Process.Pid
+	// A pause that landed while ffmpeg was starting still has to catch this
+	// process, or pausing would let a just-started encode run until the next
+	// toggle. Same lock as SetPaused signals under, so one of the two wins and
+	// the process ends up stopped either way.
+	if m.paused {
+		m.setFrozen(cmd.Process.Pid, true)
+	}
 	m.mu.Unlock()
 
 	// This run's stderr also goes to workDir/ffmpeg-<pid>.log, keyed by the

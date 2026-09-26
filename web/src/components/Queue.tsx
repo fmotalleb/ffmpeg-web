@@ -23,6 +23,12 @@ export function Queue() {
 
   const stats = (
     <>
+      {queue.paused && (
+        <span className="qstat paused">
+          <Icon name="pause" />
+          paused
+        </span>
+      )}
       {count("running") > 0 && (
         <span className="qstat running">{count("running")} encoding</span>
       )}
@@ -38,7 +44,9 @@ export function Queue() {
   );
 
   const note = queue.paused
-    ? "queue is paused"
+    ? count("running") > 0
+      ? "paused — the running encode is frozen"
+      : "queue is paused"
     : remaining > 0
       ? `about ${formatDuration(remaining)} left`
       : "";
@@ -69,10 +77,15 @@ export function Queue() {
           <span className="queue-badge">{jobsArray.length}</span>
         )}
         <div className="queue-stats">{stats}</div>
-        <span className="queue-note">{note}</span>
+        <span className={`queue-note${queue.paused ? " paused" : ""}`}>{note}</span>
         <div className="queue-actions">
           <button
             className={`btn btn-small${queue.paused ? " btn-primary" : ""}`}
+            title={
+              queue.paused
+                ? "Resume: let the frozen encode carry on and the queue start again"
+                : "Pause: freeze the running encode in place and hold the queue"
+            }
             onClick={() => {
               api("/api/queue/pause", {
                 method: "POST",
