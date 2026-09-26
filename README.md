@@ -206,7 +206,7 @@ rejected rather than silently overridden.
 
 - One encode runs at a time. Raising that is a matter of running several
   `Manager.run` workers; ffmpeg already saturates the CPU on its own.
-- Sources must sit under `-root` or in the upload folder. Symlinks are resolved
+- Sources must sit under `--root` or in the upload folder. Symlinks are resolved
   before the check, so a link out of the tree does not get you out of the tree.
 - Output names collide gracefully: `clip.mp4`, `clip (1).mp4`, and so on.
 - Cancelling deletes the partial output.
@@ -245,6 +245,7 @@ Then open <http://127.0.0.1:8723>.
 | `--ffprobe` | `ffprobe` | `FFPROBE_PATH` | Path to the `ffprobe` binary |
 | `--max-upload` | `16 GiB` | `MAX_UPLOAD_SIZE` | Largest accepted upload size in bytes |
 | `--allow-commands` | off | `ALLOW_COMMAND` | Allow the post-queue action to run a shell command |
+| `-u, --basic-auth` | `""` | `BASIC_AUTH` | Enables basic auth, format: `user:pass` |
 
 The web assets are embedded with `go:embed`, so the binary is all you need to
 deploy.
@@ -257,8 +258,17 @@ docker run --rm -p 8723:8723 -v "$PWD/videos:/data" ghcr.io/fmotalleb/ffmpeg-web
 ```
 
 The image is Alpine with ffmpeg installed, and the server runs as root.
-It starts with `-addr=0.0.0.0:8723 -root=/data -out=/data/encoded`;
-append your own flags to `docker run` to change them, and mount `/data` if you want the encodes and the
+It starts with
+
+```sh
+LISTEN="0.0.0.0:8723"
+BASE_DIR=/data
+OUTPUT_DIR=/data/encoded
+ALLOW_COMMAND=false
+MAX_UPLOAD_SIZE=16000000000
+```
+
+append your own flags/envvars to `docker run` to change them, and mount `/data` if you want the encodes and the
 queue file to survive a restart.
 
 ## Layout
@@ -325,8 +335,8 @@ the GitHub release and pushes the container image to GHCR.
 
 ## If you deploy it beyond localhost
 
-There is no authentication. The browse endpoint exposes file names under
-`-root`, the delete-source action removes files, and `-allow-commands` runs
-shell commands as the server user. Put it behind a reverse proxy with auth, keep
-`-root` pointed at a dedicated media folder rather than a home directory, and
-leave `-allow-commands` off unless you need it.
+When there is no authentication. The browse endpoint exposes file names under
+`--root`, the delete-source action removes files, and `--allow-commands` runs
+shell commands as the server user. Put it behind a reverse proxy with auth, or use `--basic-auth` argument,
+keep `--root` pointed at a dedicated media folder rather than a home directory, and
+leave `--allow-commands` off unless you need it.
