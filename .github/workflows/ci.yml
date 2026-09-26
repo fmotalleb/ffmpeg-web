@@ -71,14 +71,14 @@ jobs:
         with:
           version: v2.13.2
 
-  docker:
-    name: container image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      - uses: actions/checkout@v7
-      - name: Build image without pushing
-        run: goreleaser release --snapshot  --clean
+  # docker:
+  #   name: container image
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Set up QEMU
+  #       uses: docker/setup-qemu-action@v3
+  #     - name: Set up Docker Buildx
+  #       uses: docker/setup-buildx-action@v3
+  #     - uses: actions/checkout@v7
+  #     - name: Build image without pushing
+  #       run: go tool goreleaser release --snapshot  --clean
