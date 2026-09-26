@@ -25,7 +25,7 @@ live hardware report:
 
 You can use docker or prebuilt binaries.
 
-Note that docker containers include a build of ffmpeg and fprobe v9
+Note that docker containers include a build of ffmpeg and ffprobe v9
 
 There are multiple docker containers and you may chose one, by default, the `latest` and `<version>` tags
 are basic ffmpeg builds with no HW acceleration. you can see the list of all containers in [this](./docs/container-tags.md) file
