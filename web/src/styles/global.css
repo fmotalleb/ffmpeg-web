@@ -152,6 +152,25 @@ a.btn:hover {
   color: #fff;
 }
 
+/* The GitHub star link sits beside the brand: an external link that still
+   reads as a button, quieter than the encode actions on the right. */
+a.btn-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--ink);
+}
+a.btn-star svg { margin-right: 0; }
+a.btn-star:hover {
+  background: #33404e;
+  border-color: var(--teal);
+  color: #fff;
+}
+
 /* ---------- diff mag label ---------- */
 
 .diff-mag-label {

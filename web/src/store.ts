@@ -71,7 +71,7 @@ function defaultSettings(): Spec {
       flipH: false,
       grayscale: false,
     },
-    subtitle: { mode: "none", track: 0, tracks: [0], extra: [] },
+    subtitle: { mode: "copy", track: 0, tracks: [0], extra: [] },
     trim: { enabled: false, start: 0, end: 0 },
     extra: { encoderOptions: "", inputArgs: "", outputArgs: "" },
   };
@@ -258,20 +258,21 @@ export const useStore = create<AppState>((set, _get) => ({
       // the whole clip and the preview timeline starts over, so neither keeps
       // pointing at a moment the new file may not even have.
       settings.trim = { ...settings.trim, start: 0, end: info.duration };
-      // A new source has its own streams: start over with the first audio and
-      // subtitle track selected, and drop files added for the previous one.
-      const audioTrack = info.audio.length ? info.audio[0].index : 0;
-      const subTrack = info.subtitles.length ? info.subtitles[0].index : 0;
+      // A new source has its own streams: load every audio and subtitle track
+      // into the keep lists so nothing is dropped by default, and drop files
+      // added for the previous one.
+      const audioTracks = info.audio.map((t) => t.index);
+      const subTracks = info.subtitles.map((t) => t.index);
       settings.audio = {
         ...settings.audio,
-        track: audioTrack,
-        tracks: info.audio.length ? [audioTrack] : [],
+        track: audioTracks[0] ?? 0,
+        tracks: audioTracks,
         extra: [],
       };
       settings.subtitle = {
         ...settings.subtitle,
-        track: subTrack,
-        tracks: info.subtitles.length ? [subTrack] : [],
+        track: subTracks[0] ?? 0,
+        tracks: subTracks,
         extra: [],
       };
       return {
@@ -320,6 +321,17 @@ export const useStore = create<AppState>((set, _get) => ({
       settings.outputName = s.settings.outputName;
       settings.extra = s.settings.extra;
       settings.input = s.source ? s.source.path : "";
+      // A preset never carries track lists — they belong to the file being
+      // worked on — so refill them from the current source and keep every
+      // track instead of falling back to a single one.
+      if (s.source) {
+        const audioTracks = s.source.audio.map((t) => t.index);
+        const subTracks = s.source.subtitles.map((t) => t.index);
+        settings.audio.track = audioTracks[0] ?? 0;
+        settings.audio.tracks = audioTracks;
+        settings.subtitle.track = subTracks[0] ?? 0;
+        settings.subtitle.tracks = subTracks;
+      }
       return { settings, presetId: preset.id, ...previewReset };
     }),
 

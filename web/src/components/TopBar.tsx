@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useStore } from "../store";
 import { api, toast } from "../api";
 import { HardwareStatus } from "./HardwareStatus";
+import { Icon } from "./icons";
 import type { MediaInfo } from "../types";
 
 export function TopBar() {
@@ -45,6 +46,16 @@ export function TopBar() {
           <span className="brand-mark" aria-hidden="true" />
           <span className="brand-name">FFMPEG-Web</span>
         </div>
+        <a
+          className="btn btn-star"
+          href="https://github.com/fmotalleb/ffmpeg-web"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Star the project on GitHub"
+        >
+          <Icon name="star" />
+          Star the project
+        </a>
         <div className="topbar-actions">
           <button className="btn" onClick={() => setBrowserOpen(true)}>
             Choose file on server
