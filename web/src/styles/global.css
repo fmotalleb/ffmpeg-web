@@ -1117,6 +1117,10 @@ a.btn-star:hover {
 .qstat.running { color: var(--amber); }
 .qstat.done { color: var(--teal); }
 .qstat.failed { color: var(--rose); }
+/* The pause chip carries its own icon, so it drops the usual dot. */
+.qstat.paused { color: var(--amber); }
+.qstat.paused::before { display: none; }
+.qstat.paused svg { flex: none; }
 
 .queue-note {
   flex: 1;
@@ -1129,6 +1133,7 @@ a.btn-star:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.queue-note.paused { color: var(--amber); }
 
 .queue-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 
@@ -1242,6 +1247,9 @@ a.btn-star:hover {
   background: currentColor;
 }
 .job.running .job-state { background: rgba(224, 165, 86, 0.18); color: var(--amber); }
+.job.running.frozen .job-state { background: rgba(140, 140, 150, 0.18); color: var(--ink-dim); }
+/* A frozen encode is stopped, not going anywhere: its dot holds still
+   instead of the gentle breathing the running state could grow. */
 .job.done .job-state { background: rgba(89, 191, 176, 0.18); color: var(--teal); }
 .job.failed .job-state { background: rgba(217, 112, 102, 0.18); color: var(--rose); }
 

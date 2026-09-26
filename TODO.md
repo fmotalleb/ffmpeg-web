@@ -11,7 +11,7 @@
 
 ## Process Control
 
-- [ ] fix: pause/resume process (should freeze ffmpeg process)
+- [x] fix: pause/resume process (should freeze ffmpeg process)
 - [ ] feat: pause/resume after this job
 - [ ] expose process state:
       queued
@@ -24,16 +24,16 @@
       cancelled
 
 - [ ] graceful job cancellation
-- [ ] force-kill job
+- [x] force-kill job
 - [x] preserve process/job state across application restart
 - [x] show FFmpeg command and execution logs per job
 
 ## Frame Inspector
 
 - [x] add per-job preview page
-- [ ] select timestamp using:
+- [x] select timestamp using:
       - [x] timeline
-      - [ ] timestamp input (buggy, wont change the timeline)
+      - [x] timestamp input (buggy, wont change the timeline)
       - [x] frame step forward/backward
 
 - [x] generate source and target frame
@@ -69,36 +69,35 @@
 
 ## Job Queue
 
-- [ ] per-job preview
-- [ ] per-job configuration
+- [x] per-job preview
+- [x] per-job configuration
 - [x] edit queued job
 - [ ] duplicate job
-- [ ] retry failed job
+- [x] retry failed job
 - [x] cancel job
 - [x] delete job
 - [ ] reorder queued jobs
 - [x] show progress
 - [x] show ETA
 - [x] show encoding speed
-- [ ] show approximate output size (with a per-second refresh rate or less due to need for stat syscall on open file)
+- [x] show approximate output size (with a per-second refresh rate or less due to need for stat syscall on open file)
 - [x] show FFmpeg command
 
-- [ ] prevent editing jobs that are already running
+- [x] prevent editing jobs that are already running
 - [ ] optionally allow "duplicate and edit" for running/completed jobs
 
-- [ ] refactor job queue display
+- [x] refactor job queue display
 
 ## Configuration
 
-- [ ] read configuration exclusively from environment variables
-- [ ] do not use godotenv
-- [ ] document all environment variables
-- [ ] validate configuration at startup
+- [x] read configuration from environment variables
+- [x] document all environment variables
+- [x] validate configuration at startup
 - [ ] expose effective non-secret configuration in UI/API
 
 ## Presets
 
-- [ ] load custom presets from configurable directory
+- [x] load custom presets from configurable directory
 - [ ] validate preset files
 - [ ] expose presets in job creation UI
 - [ ] create preset from UI
@@ -107,7 +106,7 @@
 - [ ] delete preset
 - [ ] import/export preset
 - [ ] preset versioning
-- [ ] mark built-in presets as read-only
+- [x] mark built-in presets as read-only
 
 - [ ] validate preset before saving
 - [ ] prevent arbitrary command execution through preset fields
@@ -115,8 +114,8 @@
 ## Misc
 
 - [ ] background job count limiter (ffmpeg spawner for preview or worker)
-- [ ] add subtitle to video, and subtitle metadata
+- [x] add subtitle to video, and subtitle metadata
 - [ ] tests for ffmpeg command generator
-- [ ] display ffprobe's results more elegantly
-- [ ] switch logging to zaplog (instance builder using github.com/fmotalleb/go-tools)
-- [ ] switch cli framework to cobra
+- [x] display ffprobe's results more elegantly
+- [x] switch logging to zaplog (instance builder using github.com/fmotalleb/go-tools)
+- [x] switch cli framework to cobra (switched to github.com/fmotalleb/varg as a simpler alternative)

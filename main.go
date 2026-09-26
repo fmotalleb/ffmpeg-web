@@ -208,6 +208,9 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
 	logger.Info("shutting down, saving the queue")
+	// A frozen encode would outlive this server as a stopped process nothing
+	// can wake any more, so let it run on like any other interrupted job.
+	manager.thawFrozen()
 	store.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
