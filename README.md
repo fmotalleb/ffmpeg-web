@@ -34,9 +34,13 @@ are basic ffmpeg builds with no HW acceleration. you can see the list of all con
 docker run --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
 # or safer version, that runs as invoker, must be executed inside user's own directories to be able to create files under PWD
 docker run --user "$(id -u)" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
+# or with HW acceleration
+docker run --user "$(id -u)" --device /dev/dri --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-vaapi
+# and basic authentication
+docker run --user "$(id -u)" --device /dev/dri -e "BASIC_AUTH=admin:admin" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-vaapi
 ```
 
-Running this creates `./encoded` directory and the tool stores its data (queue, output files, presets ...) under this directory
+Running this creates `<root>/encoded` directory and the tool stores its data (queue, output files, presets ...) under this directory
 [read this section for more information on production deployments](#if-you-deploy-it-beyond-localhost)
 
 ## Sections
