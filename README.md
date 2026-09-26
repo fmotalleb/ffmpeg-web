@@ -36,8 +36,10 @@ docker run --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:lates
 docker run --user "$(id -u)" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
 # or with HW acceleration
 docker run --user "$(id -u)" --device /dev/dri --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-vaapi
+# or nvidia gpu variant
+docker run --user "$(id -u)" --gpus all --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-nvidia
 # and basic authentication
-docker run --user "$(id -u)" --device /dev/dri -e "BASIC_AUTH=admin:admin" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-vaapi
+docker run --user "$(id -u)" --gpus all -e "BASIC_AUTH=admin:admin" --rm -p 8723:8723 -v "$PWD/:/data" ghcr.io/fmotalleb/ffmpeg-web:latest-nvidia
 ```
 
 Running this creates `<root>/encoded` directory and the tool stores its data (queue, output files, presets ...) under this directory
