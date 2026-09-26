@@ -6,6 +6,7 @@ tool github.com/goreleaser/goreleaser/v2
 
 require (
 	github.com/fmotalleb/go-tools v0.1.81
+	github.com/fmotalleb/varg v0.0.3
 	go.uber.org/zap v1.28.0
 )
 

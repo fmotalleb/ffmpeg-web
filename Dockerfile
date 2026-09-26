@@ -16,4 +16,8 @@ VOLUME ["/data"]
 EXPOSE 8723
 
 ENTRYPOINT ["/bin/ffmpeg-web"]
-CMD ["-addr=0.0.0.0:8723", "-root=/data", "-out=/data/encoded"]
+ENV LISTEN=0.0.0.0:8723 \
+    BASE_DIR=/data \
+    OUTPUT_DIR=/data/encoded \
+    ALLOW_COMMAND=false \
+    MAX_UPLOAD_SIZE=16000000000

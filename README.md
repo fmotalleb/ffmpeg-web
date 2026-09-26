@@ -233,15 +233,16 @@ go build -o ffmpeg-web .
 
 Then open <http://127.0.0.1:8723>.
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `-addr` | `127.0.0.1:8723` | listen address |
-| `-root` | `.` | the only folder the file picker can read from |
-| `-out` | `./encodes` | where finished files are written |
-| `-ffmpeg` / `-ffprobe` | `ffmpeg` / `ffprobe` | binary paths |
-| `-queue` | `<out>/queue.json` | where the queue is saved |
-| `-max-upload` | 16 GiB | upload size ceiling |
-| `-allow-commands` | off | permit the post-queue action to run a shell command |
+| Flag | Default | Environment | Meaning |
+| --- | --- | --- | --- |
+| `-a, --address` | `127.0.0.1:8723` | `LISTEN` | Address to listen on |
+| `-r, --root` | `.` | `BASE_DIR` | Directory the browser is allowed to read sources from |
+| `-o, --out` | `./encodes` | `OUTPUT_DIR` | Directory where finished files are written |
+| `-q, --queue` | `<out>/queue.json` | `QUEUE_FILE` | Queue file used to persist the encoding queue |
+| `--ffmpeg` | `ffmpeg` | `FFMPEG_PATH` | Path to the `ffmpeg` binary |
+| `--ffprobe` | `ffprobe` | `FFPROBE_PATH` | Path to the `ffprobe` binary |
+| `--max-upload` | `16 GiB` | `MAX_UPLOAD_SIZE` | Largest accepted upload size in bytes |
+| `--allow-commands` | off | `ALLOW_COMMAND` | Allow the post-queue action to run a shell command |
 
 The web assets are embedded with `go:embed`, so the binary is all you need to
 deploy.
