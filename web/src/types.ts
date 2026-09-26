@@ -31,11 +31,22 @@ export interface VideoSpec {
 export interface AudioSpec {
   encoder: string;
   track: number;
+  /** Source audio streams to keep. Absent means "just track". */
+  tracks?: number[];
+  /** Extra audio files muxed in beside the source. */
+  extra?: AddedTrack[];
   bitrate: number;
   mixdown: string;
   sampleRate: number;
   gain: number;
   normalize: boolean;
+}
+
+/** An extra audio or subtitle file chosen from the source folder or uploaded. */
+export interface AddedTrack {
+  path: string;
+  language?: string;
+  title?: string;
 }
 
 export interface PictureSpec {
@@ -55,16 +66,33 @@ export interface PictureSpec {
 export interface FilterSpec {
   deinterlace: string;
   denoise: string;
+  deband: string;
+  blur: string;
   sharpen: boolean;
   deblock: boolean;
+  tonemap: boolean;
+  color: ColorSpec;
   rotate: number;
   flipH: boolean;
   grayscale: boolean;
 }
 
+/** Picture adjustments. 0 always means "leave this alone". */
+export interface ColorSpec {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  gamma: number;
+  hue: number;
+}
+
 export interface SubtitleSpec {
   mode: string;
   track: number;
+  /** Source subtitle streams to keep, for the copy mode. Absent means "just track". */
+  tracks?: number[];
+  /** Extra subtitle files muxed in beside the source. */
+  extra?: AddedTrack[];
 }
 
 export interface TrimSpec {

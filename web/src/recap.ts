@@ -135,7 +135,9 @@ export function recap(
               rateControl(s.video),
               s.video.speed,
               library,
-              s.video.fpsMode === "same" ? "" : `at ${s.video.fps} fps`,
+              s.video.fpsMode === "off" || s.video.fpsMode === "same"
+                ? ""
+                : `at ${s.video.fps} fps`,
             ]
               .filter(Boolean)
               .join(" · "),

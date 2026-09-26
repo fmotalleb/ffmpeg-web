@@ -130,13 +130,13 @@ export function VideoPanel() {
               value={s.video.fpsMode}
               onChange={(e) => updateSettings("video.fpsMode", e.target.value)}
             >
-              <option value="same">Same as source</option>
+              <option value="off">Don't change it</option>
               <option value="peak">Cap at</option>
               <option value="constant">Force constant</option>
             </select>
           </label>
         )}
-        {s.video.fpsMode !== "same" && (
+        {(s.video.fpsMode === "peak" || s.video.fpsMode === "constant") && (
           <label className="field">
             <span>Frames per second</span>
             <select

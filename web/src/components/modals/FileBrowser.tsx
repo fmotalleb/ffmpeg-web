@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { useStore } from "../../store";
 import { browse, probe, toast } from "../../api";
 import { formatBytes } from "../../utils";
-import type { BrowseResponse } from "../../types";
+import type { AddedTrack, BrowseResponse } from "../../types";
 
 export function FileBrowser() {
   const browserOpen = useStore((s) => s.browserOpen);
+  const browserKind = useStore((s) => s.browserKind);
+  const browserTarget = useStore((s) => s.browserTarget);
   const setBrowserOpen = useStore((s) => s.setBrowserOpen);
   const setSource = useStore((s) => s.setSource);
+  const updateSettings = useStore((s) => s.updateSettings);
+  const settings = useStore((s) => s.settings);
   const setBatchDir = useStore((s) => s.setBatchDir);
   const setBatchOpen = useStore((s) => s.setBatchOpen);
 
@@ -17,11 +21,12 @@ export function FileBrowser() {
     if (browserOpen) {
       showDirectory("");
     }
-  }, [browserOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [browserOpen, browserKind]);
 
   const showDirectory = async (path: string) => {
     try {
-      const d = await browse(path);
+      const d = await browse(path, browserKind);
       setData(d);
     } catch (err: unknown) {
       toast((err as Error).message);
@@ -29,6 +34,13 @@ export function FileBrowser() {
   };
 
   const chooseFile = async (path: string) => {
+    if (browserTarget === "audio" || browserTarget === "subtitle") {
+      const list = (settings[browserTarget].extra ?? []).slice();
+      list.push({ path } as AddedTrack);
+      updateSettings(`${browserTarget}.extra`, list);
+      setBrowserOpen(false);
+      return;
+    }
     try {
       const info = await probe(path);
       setSource(info);
@@ -40,6 +52,12 @@ export function FileBrowser() {
 
   if (!browserOpen) return null;
 
+  const adding = browserTarget === "audio" || browserTarget === "subtitle";
+  const title = adding ? `Add ${browserTarget} from a file` : "Choose a video";
+  const empty = adding
+    ? `No ${browserTarget} files or subfolders here.`
+    : "No videos or subfolders here.";
+
   return (
     <div
       className="modal"
@@ -49,7 +67,7 @@ export function FileBrowser() {
     >
       <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="browser-title">
         <header className="modal-head">
-          <h2 id="browser-title">Choose a video</h2>
+          <h2 id="browser-title">{title}</h2>
           <button className="btn btn-quiet" onClick={() => setBrowserOpen(false)}>
             Close
           </button>
@@ -87,27 +105,29 @@ export function FileBrowser() {
                 </li>
               ))}
               {!data.entries.length && (
-                <li className="browser-path">
-                  No videos or subfolders here.
-                </li>
+                <li className="browser-path">{empty}</li>
               )}
             </ul>
           </>
         )}
         <footer className="modal-foot">
           <span className="queue-summary">
-            Pick a file above, or take the whole folder.
+            {adding
+              ? "Pick a file above to add it as an extra track."
+              : "Pick a file above, or take the whole folder."}
           </span>
-          <button
-            className="btn"
-            onClick={() => {
-              setBrowserOpen(false);
-              setBatchDir(data?.path || null);
-              setBatchOpen(true);
-            }}
-          >
-            Use this folder
-          </button>
+          {!adding && (
+            <button
+              className="btn"
+              onClick={() => {
+                setBrowserOpen(false);
+                setBatchDir(data?.path || null);
+                setBatchOpen(true);
+              }}
+            >
+              Use this folder
+            </button>
+          )}
         </footer>
       </div>
     </div>
