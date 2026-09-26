@@ -37,9 +37,11 @@ func base(container string) Spec {
 		Audio: AudioSpec{
 			Encoder: "aac", Bitrate: 160, Mixdown: "stereo", SampleRate: 48000,
 		},
-		Picture:  PictureSpec{ScaleMode: "source", KeepAspect: true},
-		Filters:  FilterSpec{Deinterlace: "off", Denoise: "off"},
-		Subtitle: SubtitleSpec{Mode: "none"},
+		Picture: PictureSpec{ScaleMode: "source", KeepAspect: true},
+		Filters: FilterSpec{Deinterlace: "off", Denoise: "off"},
+		// Keeping the subtitles is the default: nothing is dropped unless the
+		// user asks for it, so every preset starts from "copy".
+		Subtitle: SubtitleSpec{Mode: "copy"},
 	}
 }
 

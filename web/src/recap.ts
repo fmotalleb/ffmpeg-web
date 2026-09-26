@@ -217,10 +217,23 @@ export function recap(
         ? subs
           ? "burned into the picture"
           : undefined
-        : s.subtitle.mode === "none" && subs
-          ? "left out"
-          : undefined,
-    kind: s.subtitle.mode === "burn" ? "burned in" : "removed",
+        : s.subtitle.mode === "copy"
+          ? subs
+            ? "kept as selectable tracks"
+            : undefined
+          : subs
+            ? "left out"
+            : undefined,
+    kind:
+      s.subtitle.mode === "burn"
+        ? "burned in"
+        : s.subtitle.mode === "copy"
+          ? subs
+            ? "kept"
+            : undefined
+          : subs
+            ? "removed"
+            : undefined,
   });
 
   const seconds = encodedSeconds(source, s);

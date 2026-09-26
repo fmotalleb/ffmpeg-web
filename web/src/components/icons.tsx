@@ -31,6 +31,7 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   chevron: <path d="M5.5 8 10 12.5 14.5 8" />,
+  star: <path d="M10 3l1.82 4.49 4.84-.33-3.71 3.8 1.16 4.7-4.11-2.56-4.11 2.56 1.16-4.7-3.71-3.8 4.84.33z" />,
   trash: (
     <>
       <path d="M3.5 5.5h13" />
