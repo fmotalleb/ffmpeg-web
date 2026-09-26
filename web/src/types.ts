@@ -3,6 +3,8 @@ export interface Spec {
   outputName: string;
   container: string;
   webOptimize: boolean;
+  /** Replace the source file with the result once it is done and checked. */
+  moveInPlace: boolean;
   video: VideoSpec;
   audio: AudioSpec;
   picture: PictureSpec;

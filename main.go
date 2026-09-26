@@ -282,6 +282,17 @@ func decodeBody(r *http.Request, v any) error {
 	return nil
 }
 
+// outputAccessible reports whether a finished file may be read back: it lives
+// in the encodes folder, or — for a job that moved in place — right beside the
+// source it replaced.
+func (s *server) outputAccessible(p string) error {
+	if s.insideOutput(p) == nil {
+		return nil
+	}
+	_, err := s.allowedPath(p)
+	return err
+}
+
 // resolveExtraTracks checks every added audio/subtitle file against the same
 // sandbox as the source, and rewrites the paths to their absolute form so the
 // worker never has to resolve them again.
@@ -529,7 +540,7 @@ func (s *server) handleJobProbe(w http.ResponseWriter, r *http.Request) {
 	path := job.Source
 	if r.URL.Query().Get("which") == "output" {
 		path = job.Output
-		if err := s.insideOutput(path); err != nil {
+		if err := s.outputAccessible(path); err != nil {
 			writeErr(w, http.StatusForbidden, err.Error())
 			return
 		}
@@ -705,7 +716,7 @@ func (s *server) handleJobClip(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, "this job hasn't finished encoding yet")
 			return
 		}
-		if err := s.insideOutput(job.Output); err != nil {
+		if err := s.outputAccessible(job.Output); err != nil {
 			writeErr(w, http.StatusForbidden, err.Error())
 			return
 		}
@@ -739,7 +750,7 @@ func (s *server) handleJobFrame(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, "this job hasn't finished encoding yet — use the live preview instead")
 			return
 		}
-		if err := s.insideOutput(job.Output); err != nil {
+		if err := s.outputAccessible(job.Output); err != nil {
 			writeErr(w, http.StatusForbidden, err.Error())
 			return
 		}
@@ -1005,10 +1016,21 @@ func (s *server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		base = sanitizeName(info.Name)
 	}
 	base = strings.TrimSuffix(base, filepath.Ext(base))
-	output := uniquePath(filepath.Join(s.outDir, base+"."+spec.Container))
-	if output == source {
-		writeErr(w, http.StatusConflict, "the output would overwrite the source")
-		return
+	var output string
+	if spec.MoveInPlace {
+		// The result takes the source's place: same folder, same name, with the
+		// chosen container deciding the extension. A rename onto the source
+		// itself is the point here, not a mistake to reject.
+		output = filepath.Join(filepath.Dir(source), base+"."+spec.Container)
+		if output != source {
+			output = uniquePath(output)
+		}
+	} else {
+		output = uniquePath(filepath.Join(s.outDir, base+"."+spec.Container))
+		if output == source {
+			writeErr(w, http.StatusConflict, "the output would overwrite the source")
+			return
+		}
 	}
 
 	job := s.jobs.Add(spec, source, output, filepath.Base(source), "", info.Duration, float64(st.Size()))
@@ -1079,16 +1101,24 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 		targetDir := filepath.Join(s.outDir, prefix, relDir)
 		target := filepath.Join(targetDir, sanitizeName(stem)+"."+spec.Container)
 
-		if target == f.Path {
+		switch {
+		case spec.MoveInPlace:
+			// Each file is replaced where it lies, so the folder tree is kept by
+			// definition and there is no existing file to skip.
+			targetDir = filepath.Dir(f.Path)
+			target = filepath.Join(targetDir, sanitizeName(stem)+"."+spec.Container)
+			if target != f.Path {
+				target = uniquePath(target)
+			}
+		case target == f.Path:
 			skipped++
 			continue
-		}
-		if req.SkipExisting {
+		case req.SkipExisting:
 			if _, err := os.Stat(target); err == nil {
 				skipped++
 				continue
 			}
-		} else {
+		default:
 			target = uniquePath(target)
 		}
 		if err := os.MkdirAll(targetDir, 0o755); err != nil {
@@ -1132,6 +1162,9 @@ func (s *server) handlePreview(w http.ResponseWriter, r *http.Request) {
 		stem = "output"
 	}
 	output := filepath.Join(s.outDir, stem+"."+spec.Container)
+	if spec.MoveInPlace && input != "" {
+		output = filepath.Join(filepath.Dir(input), stem+"."+spec.Container)
+	}
 
 	args, err := buildArgs(spec, input, output, filepath.Join(s.workDir, "preview"), 0)
 	if err != nil {
@@ -1202,13 +1235,23 @@ func (s *server) handleUpdateJob(w http.ResponseWriter, r *http.Request) {
 	if stem == "" || stem == "source" {
 		stem = strings.TrimSuffix(filepath.Base(existing.Output), filepath.Ext(existing.Output))
 	}
-	output := filepath.Join(dir, stem+"."+spec.Container)
-	if output != existing.Output {
-		output = uniquePath(output)
-	}
-	if output == existing.Source {
-		writeErr(w, http.StatusConflict, "the output would overwrite the source")
-		return
+	var output string
+	if spec.MoveInPlace {
+		// Beside the source, under the source's own name.
+		stem = strings.TrimSuffix(filepath.Base(existing.Source), filepath.Ext(existing.Source))
+		output = filepath.Join(filepath.Dir(existing.Source), stem+"."+spec.Container)
+		if output != existing.Source {
+			output = uniquePath(output)
+		}
+	} else {
+		output = filepath.Join(dir, stem+"."+spec.Container)
+		if output != existing.Output {
+			output = uniquePath(output)
+		}
+		if output == existing.Source {
+			writeErr(w, http.StatusConflict, "the output would overwrite the source")
+			return
+		}
 	}
 
 	if err := s.jobs.UpdateJob(id, spec, output); err != nil {
@@ -1291,7 +1334,7 @@ func (s *server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "this encode has not finished")
 		return
 	}
-	if err := s.insideOutput(job.Output); err != nil {
+	if err := s.outputAccessible(job.Output); err != nil {
 		writeErr(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -1395,12 +1438,17 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		output := job.Output
-		if output == "" || s.insideOutput(output) != nil {
-			stem := strings.TrimSuffix(sanitizeName(filepath.Base(source)), filepath.Ext(source))
-			output = filepath.Join(s.outDir, stem+"."+spec.Container)
+		stem := strings.TrimSuffix(sanitizeName(filepath.Base(source)), filepath.Ext(source))
+		var output string
+		if spec.MoveInPlace {
+			output = filepath.Join(filepath.Dir(source), stem+"."+spec.Container)
+		} else {
+			output = job.Output
+			if output == "" || s.insideOutput(output) != nil {
+				output = filepath.Join(s.outDir, stem+"."+spec.Container)
+			}
+			output = uniquePath(output)
 		}
-		output = uniquePath(output)
 
 		label := job.Label
 		if label == "" {
