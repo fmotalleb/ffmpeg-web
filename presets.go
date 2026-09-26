@@ -83,8 +83,8 @@ func buildPresets() []Preset {
 	hevc4k.Audio.Bitrate = 192
 	hevc4k.Audio.Mixdown = "5.1"
 
-	av1web := base("webm")
-	av1web.WebOptimize = false
+	av1web := base("mkv")
+	av1web.WebOptimize = true
 	av1web.Video = VideoSpec{
 		Encoder: "av1", RateMode: "quality", Quality: 32, Speed: "fast",
 		Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
@@ -93,8 +93,8 @@ func buildPresets() []Preset {
 	av1web.Audio.Bitrate = 128
 	av1web.Picture = PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
 
-	vp9web := base("webm")
-	vp9web.WebOptimize = false
+	vp9web := base("mkv")
+	vp9web.WebOptimize = true
 	vp9web.Video = VideoSpec{
 		Encoder: "vp9", RateMode: "quality", Quality: 31, Speed: "medium",
 		Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
