@@ -16,6 +16,7 @@ export function JobRow({ job }: { job: Job }) {
   const setActiveTab = useStore((s) => s.setActiveTab);
   const settings = useStore((s) => s.settings);
   const setProbe = useStore((s) => s.setProbe);
+  const setLogView = useStore((s) => s.setLogView);
   const queueSettings = useStore((s) => s.queue.settings);
 
   const threshold = queueSettings?.shrinkThreshold || 20;
@@ -201,6 +202,24 @@ export function JobRow({ job }: { job: Job }) {
 
       {job.status === "running" && <JobFfmpeg jobId={job.id} />}
 
+      {job.status !== "running" && job.ffmpegPid ? (
+        // The run is over, which is exactly when its log matters most: a
+        // failure is only explained by the lines leading up to it. The server
+        // keeps the file for a day, so the button stays useful.
+        <div className="job-ffmpeg">
+          <span className="job-ffmpeg-label">ffmpeg</span>
+          <span className="job-ffmpeg-value">pid {job.ffmpegPid}</span>
+          <button
+            className="btn btn-small btn-quiet job-log-btn"
+            title="Read the log of this job's ffmpeg run"
+            onClick={() => setLogView(job.ffmpegPid!, `pid ${job.ffmpegPid}`)}
+          >
+            Log
+          </button>
+          <span>the log is kept for a day</span>
+        </div>
+      ) : null}
+
       <div className="job-bar">
         <i style={{ width: `${Math.round((job.progress || 0) * 100)}%` }} />
       </div>
@@ -349,11 +368,16 @@ function ActionButton({
       className={`btn btn-small btn-quiet${danger ? " btn-danger" : ""}${accent ? " btn-accent" : ""}`}
       onClick={async (e) => {
         const btn = e.currentTarget as HTMLButtonElement;
+        // Disabling guards against a double click while the call is in
+        // flight, but it must always be undone: Details and Preview only open
+        // something, and the row is not re-rendered afterwards, so a button
+        // left disabled would never come back.
         btn.disabled = true;
         try {
           await onClick();
         } catch (err: unknown) {
           toast((err as Error).message);
+        } finally {
           btn.disabled = false;
         }
       }}

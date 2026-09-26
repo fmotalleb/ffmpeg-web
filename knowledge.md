@@ -84,5 +84,5 @@ go run . -root ~/Videos -out ~/Videos/encoded
 - ffmpeg 6.0+ required for `-fpsmax` and `-fps_mode` flags.
 - Batch encoding does not probe at queue time (deferred to worker).
 - `/api/system` figures come from `/proc` (load, memory, per-process CPU): on a host without it those fields are zero (load uses -1) and the UI hides them. The ffmpeg CPU rate needs two samples, so the first response after a restart reports `sampled: false`.
-- A running job's ffmpeg is found by the PID the manager recorded in `Job.ffmpegPID` (runtime only, never written to `queue.json`), not by matching process names, so the job row reports its own encode even when the ffmpeg binary is renamed or wrapped.
+- A running job's ffmpeg is found by the PID the manager recorded in `Job.FfmpegPID`, not by matching process names, so the job row reports its own encode even when the ffmpeg binary is renamed or wrapped. The pid is serialized as `ffmpegPid` so a finished run's log stays reachable, and `Manager.Restore` clears it for every job it loads, since a pid from an earlier boot must never be served.
 - Editing a running job requires cancelling it first.
