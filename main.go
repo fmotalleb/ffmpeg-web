@@ -44,6 +44,31 @@ var videoExt = map[string]bool{
 	".mts": true, ".rmvb": true, ".divx": true,
 }
 
+// audioExt and subtitleExt back the "add a track" pickers, which browse the
+// same folders as the source picker but only list what they can use.
+var audioExt = map[string]bool{
+	".m4a": true, ".mp3": true, ".aac": true, ".ac3": true, ".eac3": true,
+	".flac": true, ".ogg": true, ".oga": true, ".opus": true, ".wav": true,
+	".wma": true, ".dts": true, ".mka": true, ".mp2": true, ".aiff": true,
+}
+
+var subtitleExt = map[string]bool{
+	".srt": true, ".ass": true, ".ssa": true, ".vtt": true, ".sub": true,
+	".sup": true, ".smi": true, ".idx": true, ".mks": true,
+}
+
+// extSetForKind maps the browser's ?kind= to the extensions it should list.
+// An unknown or missing kind keeps the original video behavior.
+func extSetForKind(kind string) map[string]bool {
+	switch kind {
+	case "audio":
+		return audioExt
+	case "subtitle":
+		return subtitleExt
+	}
+	return videoExt
+}
+
 type server struct {
 	mediaRoot string
 	outDir    string
@@ -257,6 +282,33 @@ func decodeBody(r *http.Request, v any) error {
 	return nil
 }
 
+// resolveExtraTracks checks every added audio/subtitle file against the same
+// sandbox as the source, and rewrites the paths to their absolute form so the
+// worker never has to resolve them again.
+func (s *server) resolveExtraTracks(spec *Spec) error {
+	for i := range spec.Audio.Extra {
+		if strings.TrimSpace(spec.Audio.Extra[i].Path) == "" {
+			continue
+		}
+		p, err := s.allowedPath(spec.Audio.Extra[i].Path)
+		if err != nil {
+			return err
+		}
+		spec.Audio.Extra[i].Path = p
+	}
+	for i := range spec.Subtitle.Extra {
+		if strings.TrimSpace(spec.Subtitle.Extra[i].Path) == "" {
+			continue
+		}
+		p, err := s.allowedPath(spec.Subtitle.Extra[i].Path)
+		if err != nil {
+			return err
+		}
+		spec.Subtitle.Extra[i].Path = p
+	}
+	return nil
+}
+
 // allowedPath rejects anything outside the source root or the upload folder.
 func (s *server) allowedPath(p string) (string, error) {
 	if p == "" {
@@ -325,6 +377,7 @@ func (s *server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "cannot open that folder: "+err.Error())
 		return
 	}
+	allowedExt := extSetForKind(r.URL.Query().Get("kind"))
 
 	list := []browseEntry{}
 	for _, e := range entries {
@@ -337,7 +390,7 @@ func (s *server) handleBrowse(w http.ResponseWriter, r *http.Request) {
 			list = append(list, browseEntry{Name: name, Path: full, Dir: true})
 			continue
 		}
-		if !videoExt[strings.ToLower(filepath.Ext(name))] {
+		if !allowedExt[strings.ToLower(filepath.Ext(name))] {
 			continue
 		}
 		info, err := e.Info()
@@ -931,6 +984,10 @@ func (s *server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	spec.Container = normalizeContainer(spec.Container)
 	spec.Input = source
+	if err := s.resolveExtraTracks(&spec); err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
 
 	if _, err := buildArgs(spec, source, "preview.mp4", "", 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -987,6 +1044,10 @@ func (s *server) handleBatch(w http.ResponseWriter, r *http.Request) {
 
 	spec := req.Spec
 	spec.Container = normalizeContainer(spec.Container)
+	if err := s.resolveExtraTracks(&spec); err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
 	if _, err := buildArgs(spec, "in.mkv", "out.mp4", "", 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -1126,6 +1187,10 @@ func (s *server) handleUpdateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	spec.Container = normalizeContainer(spec.Container)
 	spec.Input = existing.Source
+	if err := s.resolveExtraTracks(&spec); err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
 
 	if _, err := buildArgs(spec, existing.Source, "preview."+spec.Container, "", 0); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
@@ -1321,6 +1386,10 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		spec := job.Spec
 		spec.Input = source
 		spec.Container = normalizeContainer(spec.Container)
+		if err := s.resolveExtraTracks(&spec); err != nil {
+			rejected = append(rejected, filepath.Base(source)+": "+err.Error())
+			continue
+		}
 		if _, err := buildArgs(spec, source, "out.mp4", "", 0); err != nil {
 			rejected = append(rejected, filepath.Base(source)+": "+err.Error())
 			continue

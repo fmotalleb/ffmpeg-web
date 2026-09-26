@@ -46,14 +46,25 @@ type VideoSpec struct {
 	GOP      int     `json:"gop"` // keyframe interval in frames, 0 = encoder default
 }
 
+// AddedTrack is an extra audio or subtitle file muxed in beside the source.
+// Language and title, when given, are written onto the stream so players can
+// label it.
+type AddedTrack struct {
+	Path     string `json:"path"`
+	Language string `json:"language,omitempty"`
+	Title    string `json:"title,omitempty"`
+}
+
 type AudioSpec struct {
-	Encoder    string  `json:"encoder"` // aac | opus | mp3 | ac3 | flac | copy | none
-	Track      int     `json:"track"`   // 0-based audio stream index
-	Bitrate    int     `json:"bitrate"` // kbit/s
-	Mixdown    string  `json:"mixdown"` // source | mono | stereo | 5.1
-	SampleRate int     `json:"sampleRate"`
-	Gain       float64 `json:"gain"` // dB
-	Normalize  bool    `json:"normalize"`
+	Encoder    string       `json:"encoder"` // aac | opus | mp3 | ac3 | flac | copy | none
+	Track      int          `json:"track"`   // legacy single-track pick; used when Tracks is nil
+	Tracks     []int        `json:"tracks"`  // source audio streams to keep; nil means just Track
+	Extra      []AddedTrack `json:"extra"`   // further audio files to mux in
+	Bitrate    int          `json:"bitrate"` // kbit/s
+	Mixdown    string       `json:"mixdown"` // source | mono | stereo | 5.1
+	SampleRate int          `json:"sampleRate"`
+	Gain       float64      `json:"gain"` // dB
+	Normalize  bool         `json:"normalize"`
 }
 
 type PictureSpec struct {
@@ -71,18 +82,34 @@ type PictureSpec struct {
 }
 
 type FilterSpec struct {
-	Deinterlace string `json:"deinterlace"` // off | yadif | bwdif
-	Denoise     string `json:"denoise"`     // off | light | medium | strong
-	Sharpen     bool   `json:"sharpen"`
-	Deblock     bool   `json:"deblock"`
-	Rotate      int    `json:"rotate"` // 0 | 90 | 180 | 270
-	FlipH       bool   `json:"flipH"`
-	Grayscale   bool   `json:"grayscale"`
+	Deinterlace string    `json:"deinterlace"` // off | yadif | bwdif
+	Denoise     string    `json:"denoise"`     // off | light | medium | strong
+	Deband      string    `json:"deband"`      // off | light | medium | strong
+	Blur        string    `json:"blur"`        // off | light | medium | strong
+	Sharpen     bool      `json:"sharpen"`
+	Deblock     bool      `json:"deblock"`
+	Tonemap     bool      `json:"tonemap"` // bring HDR highlights back into SDR range
+	Color       ColorSpec `json:"color"`
+	Rotate      int       `json:"rotate"` // 0 | 90 | 180 | 270
+	FlipH       bool      `json:"flipH"`
+	Grayscale   bool      `json:"grayscale"`
+}
+
+// ColorSpec holds the picture adjustments. Every number is relative to no
+// change — 0 leaves that property alone — so an empty ColorSpec adds no filter.
+type ColorSpec struct {
+	Brightness float64 `json:"brightness"` // -100..100
+	Contrast   float64 `json:"contrast"`   // -100..100
+	Saturation float64 `json:"saturation"` // -100..100
+	Gamma      float64 `json:"gamma"`      // -100..100
+	Hue        float64 `json:"hue"`        // degrees, -180..180
 }
 
 type SubtitleSpec struct {
-	Mode  string `json:"mode"`  // none | copy | burn
-	Track int    `json:"track"` // 0-based subtitle stream index
+	Mode   string       `json:"mode"`   // none | copy | burn
+	Track  int          `json:"track"`  // legacy pick, and the one burned in
+	Tracks []int        `json:"tracks"` // source subtitle streams to keep; nil means just Track
+	Extra  []AddedTrack `json:"extra"`  // further subtitle files to mux in
 }
 
 type TrimSpec struct {
@@ -198,6 +225,18 @@ func filterChain(s Spec, input, engine string) string {
 	p, f := s.Picture, s.Filters
 	var chain []string
 
+	if f.Tonemap {
+		// HDR to SDR: linearise the frame, tone-map the highlights back into
+		// range with BT.709 primaries, then hand on an ordinary 8-bit frame.
+		chain = append(chain,
+			"zscale=t=linear:npl=100",
+			"format=gbrpf32le",
+			"zscale=p=bt709",
+			"tonemap=tonemap=hable:desat=0",
+			"zscale=t=bt709:m=bt709:r=tv",
+			"format=yuv420p")
+	}
+
 	switch f.Deinterlace {
 	case "yadif":
 		chain = append(chain, "yadif=mode=0")
@@ -227,6 +266,31 @@ func filterChain(s Spec, input, engine string) string {
 	}
 	if f.Sharpen {
 		chain = append(chain, "unsharp=5:5:0.8:3:3:0.4")
+	}
+
+	switch f.Deband {
+	case "light":
+		chain = append(chain, "deband=1thr=0.01:2thr=0.01:3thr=0.01:4thr=0.01")
+	case "medium":
+		chain = append(chain, "deband=1thr=0.02:2thr=0.02:3thr=0.02:4thr=0.02:range=16")
+	case "strong":
+		chain = append(chain, "deband=1thr=0.04:2thr=0.04:3thr=0.04:4thr=0.04:range=32")
+	}
+
+	switch f.Blur {
+	case "light":
+		chain = append(chain, "gblur=sigma=1")
+	case "medium":
+		chain = append(chain, "gblur=sigma=2.5")
+	case "strong":
+		chain = append(chain, "gblur=sigma=5")
+	}
+
+	if eq := colorFilter(f.Color); eq != "" {
+		chain = append(chain, eq)
+	}
+	if f.Color.Hue != 0 {
+		chain = append(chain, fmt.Sprintf("hue=h=%s", trimFloat(f.Color.Hue)))
 	}
 
 	switch f.Rotate {
@@ -301,6 +365,63 @@ func escapeFilterPath(p string) string {
 	return "'" + r.Replace(p) + "'"
 }
 
+// colorFilter renders the brightness/contrast/saturation/gamma adjustments as
+// one eq filter, or "" when every one of them is left alone.
+func colorFilter(c ColorSpec) string {
+	var parts []string
+	if c.Brightness != 0 {
+		parts = append(parts, "brightness="+trimFloat(c.Brightness/100))
+	}
+	if c.Contrast != 0 {
+		parts = append(parts, "contrast="+trimFloat(1+c.Contrast/100))
+	}
+	if c.Saturation != 0 {
+		parts = append(parts, "saturation="+trimFloat(1+c.Saturation/100))
+	}
+	if c.Gamma != 0 {
+		parts = append(parts, "gamma="+trimFloat(1+c.Gamma/100))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "eq=" + strings.Join(parts, ":")
+}
+
+// presentExtras drops added-track entries with no file chosen yet, keeping the
+// order the input numbering below depends on.
+func presentExtras(s Spec) (audio, subs []AddedTrack) {
+	for _, t := range s.Audio.Extra {
+		if strings.TrimSpace(t.Path) != "" {
+			audio = append(audio, t)
+		}
+	}
+	for _, t := range s.Subtitle.Extra {
+		if strings.TrimSpace(t.Path) != "" {
+			subs = append(subs, t)
+		}
+	}
+	return audio, subs
+}
+
+// selectedStreams lists which source streams to keep. A nil list is a spec
+// written before the track list existed, where one number meant one stream; a
+// present but empty list means the user removed every source track.
+func selectedStreams(list []int, legacy int) []int {
+	if list == nil {
+		return []int{legacy}
+	}
+	seen := map[int]bool{}
+	out := make([]int, 0, len(list))
+	for _, v := range list {
+		if v < 0 || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
+}
+
 func audioFilterChain(a AudioSpec) string {
 	var chain []string
 	if a.Normalize {
@@ -356,14 +477,38 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 		args = append(args, "-t", trimFloat(s.Trim.End-s.Trim.Start))
 	}
 
+	// Every added audio or subtitle file is an input of its own. Where they sit
+	// in the command line decides the numbers the -map calls below use: the
+	// source is input 0, then the added audio files, then the subtitles.
+	audioExtra, subExtra := presentExtras(s)
+	for _, t := range audioExtra {
+		args = append(args, "-i", t.Path)
+	}
+	for _, t := range subExtra {
+		args = append(args, "-i", t.Path)
+	}
+	subBase := 1 + len(audioExtra)
+
 	args = append(args, "-map", "0:v:0?")
+	srcAudio := selectedStreams(s.Audio.Tracks, s.Audio.Track)
+	srcSubs := selectedStreams(s.Subtitle.Tracks, s.Subtitle.Track)
 	audioOn := s.Audio.Encoder != "none" && pass != 1
 	if audioOn {
-		args = append(args, "-map", fmt.Sprintf("0:a:%d?", s.Audio.Track))
+		for _, idx := range srcAudio {
+			args = append(args, "-map", fmt.Sprintf("0:a:%d?", idx))
+		}
+		for i := range audioExtra {
+			args = append(args, "-map", fmt.Sprintf("%d:a:0?", i+1))
+		}
 	}
 	subsCopied := s.Subtitle.Mode == "copy" && s.Container != "webm" && pass != 1
 	if subsCopied {
-		args = append(args, "-map", fmt.Sprintf("0:s:%d?", s.Subtitle.Track))
+		for _, idx := range srcSubs {
+			args = append(args, "-map", fmt.Sprintf("0:s:%d?", idx))
+		}
+		for i := range subExtra {
+			args = append(args, "-map", fmt.Sprintf("%d:s:0?", subBase+i))
+		}
 	}
 
 	// ---- video ----
@@ -431,6 +576,11 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 		if aenc == "" {
 			aenc = "aac"
 		}
+		// An added file is a foreign stream, so copying it would break for any
+		// codec the chosen container cannot carry — those runs re-encode.
+		if aenc == "copy" && len(audioExtra) > 0 {
+			aenc = "aac"
+		}
 		args = append(args, "-c:a", aenc)
 		if aenc != "copy" {
 			if s.Audio.Bitrate > 0 && aenc != "flac" {
@@ -446,6 +596,16 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 				args = append(args, "-af", af)
 			}
 		}
+		// Label the added streams so a player can tell the dub track apart.
+		for j, tr := range audioExtra {
+			idx := strconv.Itoa(len(srcAudio) + j)
+			if tr.Language != "" {
+				args = append(args, "-metadata:s:a:"+idx, "language="+tr.Language)
+			}
+			if tr.Title != "" {
+				args = append(args, "-metadata:s:a:"+idx, "title="+tr.Title)
+			}
+		}
 	default:
 		args = append(args, "-an")
 	}
@@ -456,6 +616,15 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 			args = append(args, "-c:s", "mov_text")
 		} else {
 			args = append(args, "-c:s", "copy")
+		}
+		for j, tr := range subExtra {
+			idx := strconv.Itoa(len(srcSubs) + j)
+			if tr.Language != "" {
+				args = append(args, "-metadata:s:s:"+idx, "language="+tr.Language)
+			}
+			if tr.Title != "" {
+				args = append(args, "-metadata:s:s:"+idx, "title="+tr.Title)
+			}
 		}
 	} else if pass != 1 {
 		args = append(args, "-sn")

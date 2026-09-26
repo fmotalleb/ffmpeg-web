@@ -27,13 +27,16 @@ function defaultSettings(): Spec {
       profile: "auto",
       level: "auto",
       tune: "none",
-      fpsMode: "same",
+      // "off" leaves the frame rate exactly as the source has it.
+      fpsMode: "off",
       fps: "30",
       gop: 0,
     },
     audio: {
       encoder: "aac",
       track: 0,
+      tracks: [0],
+      extra: [],
       bitrate: 160,
       mixdown: "stereo",
       sampleRate: 48000,
@@ -56,15 +59,50 @@ function defaultSettings(): Spec {
     filters: {
       deinterlace: "off",
       denoise: "off",
+      deband: "off",
+      blur: "off",
       sharpen: false,
       deblock: false,
+      tonemap: false,
+      color: { brightness: 0, contrast: 0, saturation: 0, gamma: 0, hue: 0 },
       rotate: 0,
       flipH: false,
       grayscale: false,
     },
-    subtitle: { mode: "none", track: 0 },
+    subtitle: { mode: "none", track: 0, tracks: [0], extra: [] },
     trim: { enabled: false, start: 0, end: 0 },
     extra: { encoderOptions: "", inputArgs: "", outputArgs: "" },
+  };
+}
+
+// A preset saved by an older build can be missing the fields added since, so
+// fill them in from the defaults rather than letting `undefined` reach a panel.
+function normalizeSpec(spec: Spec): Spec {
+  const base = defaultSettings();
+  return {
+    ...base,
+    ...spec,
+    video: { ...base.video, ...spec.video },
+    audio: {
+      ...base.audio,
+      ...spec.audio,
+      tracks: spec.audio?.tracks ?? base.audio.tracks,
+      extra: spec.audio?.extra ?? [],
+    },
+    picture: { ...base.picture, ...spec.picture },
+    filters: {
+      ...base.filters,
+      ...spec.filters,
+      color: { ...base.filters.color, ...spec.filters?.color },
+    },
+    subtitle: {
+      ...base.subtitle,
+      ...spec.subtitle,
+      tracks: spec.subtitle?.tracks ?? base.subtitle.tracks,
+      extra: spec.subtitle?.extra ?? [],
+    },
+    trim: { ...base.trim, ...spec.trim },
+    extra: { ...base.extra, ...spec.extra },
   };
 }
 
@@ -111,6 +149,8 @@ export interface AppState {
   contactSheetBlob: Blob | null;
   browserDir: string | null;
   browserOpen: boolean;
+  browserKind: "video" | "audio" | "subtitle";
+  browserTarget: "source" | "audio" | "subtitle";
   batchDir: string | null;
   batchOpen: boolean;
   probeOpen: boolean;
@@ -147,6 +187,7 @@ export interface AppState {
   setThumbSourceMode: (m: "source" | "target") => void;
   setContactSheetBlob: (b: Blob | null) => void;
   setBrowserOpen: (open: boolean) => void;
+  openBrowser: (kind: "video" | "audio" | "subtitle", target: "source" | "audio" | "subtitle") => void;
   setBrowserDir: (dir: string | null) => void;
   setBatchOpen: (open: boolean) => void;
   setBatchDir: (dir: string | null) => void;
@@ -190,6 +231,8 @@ export const useStore = create<AppState>((set, _get) => ({
   contactSheetBlob: null,
   browserDir: null,
   browserOpen: false,
+  browserKind: "video",
+  browserTarget: "source",
   batchDir: null,
   batchOpen: false,
   probeOpen: false,
@@ -204,7 +247,7 @@ export const useStore = create<AppState>((set, _get) => ({
 
   setSource: (info) =>
     set((s) => {
-      const settings = { ...s.settings };
+      const settings = structuredClone(s.settings);
       settings.input = info.path;
       if (!settings.outputName) {
         settings.outputName = info.name.replace(/\.[^.]+$/, "");
@@ -213,8 +256,22 @@ export const useStore = create<AppState>((set, _get) => ({
       // the whole clip and the preview timeline starts over, so neither keeps
       // pointing at a moment the new file may not even have.
       settings.trim = { ...settings.trim, start: 0, end: info.duration };
-      settings.audio.track = info.audio.length ? info.audio[0].index : 0;
-      settings.subtitle.track = info.subtitles.length ? info.subtitles[0].index : 0;
+      // A new source has its own streams: start over with the first audio and
+      // subtitle track selected, and drop files added for the previous one.
+      const audioTrack = info.audio.length ? info.audio[0].index : 0;
+      const subTrack = info.subtitles.length ? info.subtitles[0].index : 0;
+      settings.audio = {
+        ...settings.audio,
+        track: audioTrack,
+        tracks: info.audio.length ? [audioTrack] : [],
+        extra: [],
+      };
+      settings.subtitle = {
+        ...settings.subtitle,
+        track: subTrack,
+        tracks: info.subtitles.length ? [subTrack] : [],
+        extra: [],
+      };
       return {
         source: info,
         settings,
@@ -257,7 +314,7 @@ export const useStore = create<AppState>((set, _get) => ({
 
   applyPreset: (preset) =>
     set((s) => {
-      const settings = { ...defaultSettings(), ...structuredClone(preset.settings) };
+      const settings = normalizeSpec(structuredClone(preset.settings));
       settings.outputName = s.settings.outputName;
       settings.extra = s.settings.extra;
       settings.input = s.source ? s.source.path : "";
@@ -314,6 +371,8 @@ export const useStore = create<AppState>((set, _get) => ({
   setThumbSourceMode: (m) => set({ thumbSourceMode: m }),
   setContactSheetBlob: (b) => set({ contactSheetBlob: b }),
   setBrowserOpen: (open) => set({ browserOpen: open }),
+  openBrowser: (kind, target) =>
+    set({ browserOpen: true, browserKind: kind, browserTarget: target }),
   setBrowserDir: (dir) => set({ browserDir: dir }),
   setBatchOpen: (open) => set({ batchOpen: open }),
   setBatchDir: (dir) => set({ batchDir: dir }),

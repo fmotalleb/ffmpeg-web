@@ -12,8 +12,8 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   return data as T;
 }
 
-export async function browse(path: string): Promise<BrowseResponse> {
-  return api(`/api/browse?path=${encodeURIComponent(path)}`);
+export async function browse(path: string, kind: "video" | "audio" | "subtitle" = "video"): Promise<BrowseResponse> {
+  return api(`/api/browse?path=${encodeURIComponent(path)}&kind=${kind}`);
 }
 
 export async function probe(path: string): Promise<MediaInfo> {
