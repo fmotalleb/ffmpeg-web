@@ -13,6 +13,7 @@ type Spec struct {
 	OutputName  string       `json:"outputName"`
 	Container   string       `json:"container"` // mp4 | mkv | webm
 	WebOptimize bool         `json:"webOptimize"`
+	MoveInPlace bool         `json:"moveInPlace"` // replace the source file with the result
 	Video       VideoSpec    `json:"video"`
 	Audio       AudioSpec    `json:"audio"`
 	Picture     PictureSpec  `json:"picture"`

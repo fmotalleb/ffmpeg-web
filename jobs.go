@@ -125,7 +125,11 @@ func (m *Manager) Restore(snap Snapshot) (recovered int) {
 	for i := range snap.Jobs {
 		job := snap.Jobs[i]
 		if job.Status == StatusRunning {
-			if job.Output != "" {
+			// A move-in-place run encoded into the work folder and left the
+			// original alone, so only that half-written file is thrown away.
+			if job.Spec.MoveInPlace {
+				_ = os.Remove(m.encodeTarget(&job))
+			} else if job.Output != "" {
 				_ = os.Remove(job.Output)
 			}
 			job.Status = StatusQueued
@@ -404,7 +408,7 @@ func (m *Manager) Retry(id string) error {
 		m.mu.Unlock()
 		return errors.New("the source file was deleted, so this cannot be encoded again")
 	}
-	if j.Output != "" {
+	if j.Output != "" && !j.Spec.MoveInPlace {
 		_ = os.Remove(j.Output)
 	}
 	j.Status = StatusQueued
@@ -439,7 +443,10 @@ func (m *Manager) UpdateJob(id string, spec Spec, output string) error {
 	}
 
 	resetProgress := j.Status != StatusQueued
-	if j.Output != "" && (resetProgress || j.Output != output) {
+	// A move-in-place job's output path is its source as well, so it must not
+	// be deleted here — that would throw away the only copy.
+	wasInPlace := j.Spec.MoveInPlace
+	if j.Output != "" && !wasInPlace && (resetProgress || j.Output != output) {
 		_ = os.Remove(j.Output)
 	}
 
@@ -596,6 +603,95 @@ func (m *Manager) maybeFireHook() {
 	go m.hooks.Run(hook, summary)
 }
 
+// encodeTarget is the path a run actually writes. An ordinary job writes
+// straight to its output; a move-in-place job writes into the work folder, so
+// the original file survives until the new one is finished and checked.
+func (m *Manager) encodeTarget(job *Job) string {
+	if !job.Spec.MoveInPlace {
+		return job.Output
+	}
+	ext := filepath.Ext(job.Output)
+	if ext == "" {
+		ext = "." + normalizeContainer(job.Spec.Container)
+	}
+	return filepath.Join(m.workDir, job.ID+"-inplace"+ext)
+}
+
+// moveIntoPlace puts a finished encode where the original file was. A rename is
+// atomic when both live on one filesystem; otherwise the bytes are copied to a
+// temporary file in the destination folder first, and only then swapped in, so
+// the original is never left half-written.
+func moveIntoPlace(from, to string) error {
+	if from == "" || from == to {
+		return nil
+	}
+	if err := os.Rename(from, to); err == nil {
+		return nil
+	}
+
+	in, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	tmp, err := os.CreateTemp(filepath.Dir(to), ".ffmpeg-web-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := io.Copy(tmp, in); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, to); err != nil {
+		// Windows will not rename onto an existing file. The replacement is
+		// safely on disk by now, so the old one can go.
+		if removeErr := os.Remove(to); removeErr != nil && !os.IsNotExist(removeErr) {
+			os.Remove(tmpName)
+			return err
+		}
+		if err := os.Rename(tmpName, to); err != nil {
+			os.Remove(tmpName)
+			return err
+		}
+	}
+	return os.Remove(from)
+}
+
+// commitInPlace swaps a finished, checked encode over the file it came from.
+// The original is gone afterwards, which the job records so a retry does not
+// pretend the old file is still there.
+func (m *Manager) commitInPlace(job *Job) error {
+	m.mu.RLock()
+	tmp, out, source := m.encodeTarget(job), job.Output, job.Source
+	m.mu.RUnlock()
+
+	if err := moveIntoPlace(tmp, out); err != nil {
+		return fmt.Errorf("could not replace the source file: %w", err)
+	}
+	// A changed container gives the result a new name, so the old file is still
+	// sitting beside it and has to go.
+	if out != source {
+		if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
+			m.appendLog(job, "could not remove the old source file: "+err.Error())
+		}
+	}
+	m.mu.Lock()
+	job.SourceDeleted = true
+	m.mu.Unlock()
+	return nil
+}
+
 func (m *Manager) run(job *Job) {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -631,6 +727,7 @@ func (m *Manager) run(job *Job) {
 	}
 
 	passLog := filepath.Join(m.workDir, job.ID)
+	target := m.encodeTarget(job)
 	var runErr error
 
 	if job.Passes == 2 {
@@ -640,7 +737,7 @@ func (m *Manager) run(job *Job) {
 			job.Progress = 0
 			m.mu.Unlock()
 			m.publish(job)
-			if runErr = m.exec(ctx, job, passLog, pass); runErr != nil {
+			if runErr = m.exec(ctx, job, target, passLog, pass); runErr != nil {
 				break
 			}
 		}
@@ -651,7 +748,7 @@ func (m *Manager) run(job *Job) {
 		m.mu.Lock()
 		job.Pass = 1
 		m.mu.Unlock()
-		runErr = m.exec(ctx, job, passLog, 0)
+		runErr = m.exec(ctx, job, target, passLog, 0)
 	}
 
 	m.finish(job, ctx, runErr)
@@ -671,21 +768,28 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 	switch {
 	case stopped:
 		job.Status = StatusCanceled
-		os.Remove(job.Output)
+		os.Remove(m.encodeTarget(job))
 	case runErr != nil:
 		job.Status = StatusFailed
 		job.Error = runErr.Error()
+		if job.Spec.MoveInPlace {
+			os.Remove(m.encodeTarget(job))
+		}
 	default:
 		job.Status = StatusDone
 		job.Progress = 1
-		if st, err := os.Stat(job.Output); err == nil {
+		// Stat what the run actually wrote: on a move-in-place job the output
+		// path still holds the original file at this point.
+		if st, err := os.Stat(m.encodeTarget(job)); err == nil {
 			job.OutSize = st.Size()
 			if job.SourceSize > 0 {
 				job.SavedPct = (1 - float64(st.Size())/float64(job.SourceSize)) * 100
 			}
 		}
 	}
-	output, expected := job.Output, encodedLength(job)
+	// The check runs against what was encoded, and only once it passes does a
+	// move-in-place job take the source's place.
+	output, expected := m.encodeTarget(job), encodedLength(job)
 	done := job.Status == StatusDone
 	m.mu.Unlock()
 
@@ -707,6 +811,16 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 		job.Verified = false
 		job.VerifyNote = "file check is switched off"
 		m.mu.Unlock()
+	}
+
+	if done && job.Spec.MoveInPlace {
+		if err := m.commitInPlace(job); err != nil {
+			m.mu.Lock()
+			job.Status = StatusFailed
+			job.Error = err.Error()
+			done = false
+			m.mu.Unlock()
+		}
 	}
 
 	if done && settings.AutoDeleteSource {
@@ -740,12 +854,12 @@ func (m *Manager) publish(j *Job) {
 	m.broker.Publish("job", snapshot)
 }
 
-func (m *Manager) exec(ctx context.Context, job *Job, passLog string, pass int) error {
+func (m *Manager) exec(ctx context.Context, job *Job, target, passLog string, pass int) error {
 	m.mu.RLock()
-	spec, source, output := job.Spec, job.Source, job.Output
+	spec, source := job.Spec, job.Source
 	m.mu.RUnlock()
 
-	args, err := buildArgs(spec, source, output, passLog, pass)
+	args, err := buildArgs(spec, source, target, passLog, pass)
 	if err != nil {
 		return err
 	}

@@ -73,7 +73,24 @@ export function SummaryPanel() {
           />
           <span>Start playing before the file finishes downloading</span>
         </label>
+        <label className="field check">
+          <input
+            type="checkbox"
+            checked={s.moveInPlace}
+            onChange={(e) => updateSettings("moveInPlace", e.target.checked)}
+          />
+          <span>Replace the source file with the result</span>
+        </label>
       </div>
+
+      {s.moveInPlace && (
+        <p className="note">
+          The encode is written elsewhere first and only swapped into place
+          once it finishes and passes the file check, so the original is never
+          lost to a failed run. The original is then gone — there is no second
+          copy afterwards.
+        </p>
+      )}
 
       <h3 className="group-title">Encode only part of the video</h3>
       <div className="grid">

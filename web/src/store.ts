@@ -16,6 +16,7 @@ function defaultSettings(): Spec {
     outputName: "",
     container: "mp4",
     webOptimize: true,
+    moveInPlace: false,
     video: {
       encoder: "x264",
       library: "sw",
