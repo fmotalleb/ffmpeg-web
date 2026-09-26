@@ -116,7 +116,7 @@ On startup, any job that was `running` when the process died is reset to
 `queued` and its half-written output is deleted, so that file is encoded again
 from the beginning rather than left as a broken stub. Finished, failed and
 waiting jobs come back untouched. Export and import move a queue between
-machines; imported jobs are re-validated against `-root` and come back as
+machines; imported jobs are re-validated against `--root` and come back as
 waiting regardless of the state they were exported in.
 
 ## Checking the result
@@ -133,7 +133,7 @@ attached, and is kept so you can look at it.
 A finished job that shrank by at least the threshold (20% by default) gets a
 "Delete source" button showing the actual saving. Turn on the automatic version
 in queue options to have it happen without asking. Either way the source only
-goes if the output passed verification and the source sits inside `-root`.
+goes if the output passed verification and the source sits inside `--root`.
 
 ## After the queue empties
 
@@ -246,7 +246,7 @@ rejected rather than silently overridden.
 
 ```sh
 go build -o ffmpeg-web .
-./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
+./ffmpeg-web --root ~/Videos --out ~/Videos/encoded
 ```
 
 Then open <http://127.0.0.1:8723>.

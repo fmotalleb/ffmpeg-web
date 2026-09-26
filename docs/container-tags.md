@@ -83,8 +83,8 @@ is the fastest way to test a variant.
 docker run --rm -p 8723:8723 -v "$PWD/videos:/data" ghcr.io/fmotalleb/ffmpeg-web:latest
 ```
 
-- The entrypoint is `/bin/ffmpeg-web` with
-  `-addr=0.0.0.0:8723 -root=/data -out=/data/encoded`; append flags to override
+- The entrypoint is `/bin/ffmpeg-web` with env vars resembling
+  `--address=0.0.0.0:8723 --root=/data --out=/data/encoded`; append flags to override
   (e.g. `ghcr.io/fmotalleb/ffmpeg-web:latest -root=/media`).
 - `/data` is declared a `VOLUME`, so bind-mount it if you want the encodes and
   `queue.json` to survive container restarts.

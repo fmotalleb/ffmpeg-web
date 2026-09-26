@@ -11,11 +11,11 @@
 go build -o ffmpeg-web .
 
 # Run
-./ffmpeg-web -root ~/Videos -out ~/Videos/encoded
+./ffmpeg-web --root ~/Videos --out ~/Videos/encoded
 # Then open http://127.0.0.1:8723
 
 # Run directly (no build step)
-go run . -root ~/Videos -out ~/Videos/encoded
+go run . --root ~/Videos --out ~/Videos/encoded
 ```
 
 ## Requirements
@@ -57,7 +57,7 @@ go run . -root ~/Videos -out ~/Videos/encoded
 - **SSE (Server-Sent Events)** push real-time progress to the browser.
 - **Queue persists to `queue.json`** — survives crashes via atomic writes (temp file + rename).
 - **Crash recovery** — running jobs reset to queued; partial output deleted.
-- **Path sandboxing** — all file access is restricted to `-root` and upload folder; symlinks resolved before check.
+- **Path sandboxing** — all file access is restricted to `--root` and upload folder; symlinks resolved before check.
 - **Frame cache** — keyed by file identity + timestamp + width + filters; avoids re-running ffmpeg.
 
 ## API Conventions
