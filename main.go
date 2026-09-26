@@ -6,7 +6,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/fmotalleb/go-tools/git"
 	"github.com/fmotalleb/go-tools/log"
+	"github.com/fmotalleb/varg"
 	"go.uber.org/zap"
 )
 
@@ -99,26 +99,43 @@ func main() {
 		context.Background(),
 		logger,
 	)
-
-	addr := flag.String("addr", "127.0.0.1:8723", "address to listen on")
-	root := flag.String("root", ".", "directory the browser is allowed to read sources from")
-	out := flag.String("out", "./encodes", "directory finished files are written to")
-	queueFile := flag.String("queue", "", "queue file (default: <out>/queue.json)")
-	ffmpegBin := flag.String("ffmpeg", "ffmpeg", "path to the ffmpeg binary")
-	ffprobeBin := flag.String("ffprobe", "ffprobe", "path to the ffprobe binary")
-	maxUpload := flag.Int64("max-upload", 16<<30, "largest accepted upload in bytes")
-	allowCmds := flag.Bool("allow-commands", false, "let the post-queue action run a shell command")
-	flag.Parse()
-
+	args := varg.New("ffmpeg-web")
+	args.Version(git.String())
+	args.String("address", "a", "127.0.0.1:8723", "address to listen on").Env("LISTEN")
+	args.String("root", "r", ".", "directory the browser is allowed to read sources from").Env("BASE_DIR")
+	args.String("out", "o", "./encodes", "directory finished files are written to").Env("OUTPUT_DIR")
+	args.String("queue", "q", "", "queue file (default: <out>/queue.json)").Env("QUEUE_FILE")
+	args.String("ffmpeg", "", "ffmpeg", "path to the ffmpeg binary").Env("FFMPEG_PATH")
+	args.String("ffprobe", "", "ffprobe", "path to the ffprobe binary").Env("FFPROBE_PATH")
+	args.Int("max-upload", "", 16<<30, "largest accepted upload in bytes").Env("MAX_UPLOAD_SIZE")
+	args.Bool("allow-commands", "", false, "let the post-queue action run a shell command").Env("ALLOW_COMMAND")
 	must := func(err error) {
 		if err != nil {
 			logger.Fatal("startup failed", zap.Error(err))
 		}
 	}
 
-	mediaRoot, err := filepath.Abs(*root)
+	r := args.Handle(os.Args)
+	if r.ShouldExit {
+		must(r.Err)
+		fmt.Println(r.Output)
+		os.Exit(0)
+	}
+	cfg := r.Config
+
+	addr := cfg.String("address")
+	root := cfg.String("root")
+	out := cfg.String("out")
+	queueFile := cfg.String("queue")
+	ffmpegBin := cfg.String("ffmpeg")
+	ffprobeBin := cfg.String("ffprobe")
+	maxUpload := cfg.Int("max-upload")
+	allowCmds := cfg.Bool("allow-commands")
+
+	mediaRoot, err := filepath.Abs(root)
 	must(err)
-	outDir, err := filepath.Abs(*out)
+
+	outDir, err := filepath.Abs(out)
 	must(err)
 	must(os.MkdirAll(outDir, 0o755))
 
@@ -127,16 +144,16 @@ func main() {
 	must(os.MkdirAll(uploadDir, 0o755))
 	must(os.MkdirAll(workDir, 0o755))
 
-	for _, bin := range []string{*ffmpegBin, *ffprobeBin} {
+	for _, bin := range []string{ffmpegBin, ffprobeBin} {
 		if _, err := exec.LookPath(bin); err != nil {
 			logger.Fatal("required binary not found on PATH — install ffmpeg, or pass -ffmpeg/-ffprobe",
 				zap.String("binary", bin))
 		}
 	}
 
-	probeEncoders(*ffmpegBin)
+	probeEncoders(ffmpegBin)
 
-	queuePath := *queueFile
+	queuePath := queueFile
 	if queuePath == "" {
 		queuePath = filepath.Join(outDir, "queue.json")
 	}
@@ -145,8 +162,8 @@ func main() {
 	must(err)
 
 	broker := NewBroker()
-	hooks := &hookRunner{log: logger.Named("hooks"), allowCommands: *allowCmds, outDir: outDir}
-	manager := NewManager(*ffmpegBin, *ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
+	hooks := &hookRunner{log: logger.Named("hooks"), allowCommands: allowCmds, outDir: outDir}
+	manager := NewManager(ffmpegBin, ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
 	recovered := manager.Restore(snap)
 	store.Start(manager.Snapshot)
 	manager.Start()
@@ -156,15 +173,15 @@ func main() {
 
 	srv := &server{
 		mediaRoot: mediaRoot, outDir: outDir, uploadDir: uploadDir, workDir: workDir,
-		ffmpeg: *ffmpegBin, ffprobe: *ffprobeBin,
+		ffmpeg: ffmpegBin, ffprobe: ffprobeBin,
 		broker: broker, jobs: manager, store: store, presets: presetStore, frames: newFrameCache(256 << 20),
 		log:       logger.Named("web"),
 		monitor:   newSystemMonitor(),
-		maxUpload: *maxUpload, allowCmds: *allowCmds,
+		maxUpload: int64(maxUpload), allowCmds: allowCmds,
 	}
 
 	httpSrv := &http.Server{
-		Addr:              *addr,
+		Addr:              addr,
 		Handler:           srv.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(_ net.Listener) context.Context {
@@ -181,7 +198,7 @@ func main() {
 			logger.Info("recovered interrupted jobs — their partial output was deleted and they will run again",
 				zap.Int("count", recovered))
 		}
-		logger.Info("listening", zap.String("addr", *addr))
+		logger.Info("listening", zap.String("addr", addr))
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("http server failed", zap.Error(err))
 		}
