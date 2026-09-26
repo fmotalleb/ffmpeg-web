@@ -42,7 +42,29 @@ export function AdvancedPanel() {
         These go straight to ffmpeg. They are not checked beyond quoting, so a
         typo here shows up as a failed job with the ffmpeg error attached.
       </p>
+      <p className="note">
+        The log level only decides how much of this run is kept in its log — it
+        changes nothing about the file that comes out. A finished job keeps a
+        Log button in the queue for a day, which is where the detail shows up.
+      </p>
       <div className="grid">
+        <label className="field">
+          <span>
+            ffmpeg log level{" "}
+            <em className="hint">how much this run writes to its log</em>
+          </span>
+          <select
+            value={settings.logLevel ?? "error"}
+            onChange={(e) => updateSettings("logLevel", e.target.value)}
+          >
+            <option value="error">Error only</option>
+            <option value="warning">Warnings and errors</option>
+            <option value="info">Informational</option>
+            <option value="verbose">Verbose</option>
+            <option value="debug">Debug</option>
+            <option value="trace">Trace</option>
+          </select>
+        </label>
         <label className="field field-wide">
           <span>
             Encoder options{" "}

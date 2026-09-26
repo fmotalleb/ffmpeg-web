@@ -180,12 +180,14 @@ func newPresetStore(path string, log *zap.Logger) *presetStore {
 	return &presetStore{path: path, log: log}
 }
 
+// list returns the user's own presets first: they saved them for the files
+// they are working on right now, so they belong above the built-ins.
 func (s *presetStore) list() []Preset {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]Preset, 0, len(presets)+len(s.user))
-	out = append(out, presets...)
 	out = append(out, s.user...)
+	out = append(out, presets...)
 	return out
 }
 

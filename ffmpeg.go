@@ -14,6 +14,7 @@ type Spec struct {
 	Container   string       `json:"container"` // mp4 | mkv | webm
 	WebOptimize bool         `json:"webOptimize"`
 	MoveInPlace bool         `json:"moveInPlace"` // replace the source file with the result
+	LogLevel    string       `json:"logLevel"`    // how much this run writes to its log; empty means error
 	Video       VideoSpec    `json:"video"`
 	Audio       AudioSpec    `json:"audio"`
 	Picture     PictureSpec  `json:"picture"`
@@ -438,10 +439,27 @@ func trimFloat(f float64) string {
 	return strconv.FormatFloat(f, 'f', -1, 64)
 }
 
+// logLevels are the ffmpeg verbosity names a spec may ask for. Anything else —
+// an old spec, or a hand-edited one — falls back to error, so a job can never
+// be turned into a flood by accident.
+var logLevels = map[string]bool{
+	"quiet": true, "panic": true, "fatal": true, "error": true,
+	"warning": true, "info": true, "verbose": true, "debug": true, "trace": true,
+}
+
+func resolveLogLevel(name string) string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if logLevels[name] {
+		return name
+	}
+	return "error"
+}
+
 // buildArgs renders the ffmpeg command line.
 // pass is 0 for a single-pass encode, or 1/2 for two-pass ABR.
 func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error) {
-	args := []string{"-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+	args := []string{"-hide_banner", "-nostdin", "-y",
+		"-loglevel", resolveLogLevel(s.LogLevel),
 		"-progress", "pipe:1", "-nostats"}
 
 	inputExtra, err := splitArgs(s.Extra.InputArgs)
