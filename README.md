@@ -18,7 +18,7 @@ The main panel with the queue, the settings panes, the frame inspector and the
 live hardware report:
 
 <p align="center">
-  <img src="docs/panel.webp" alt="FFMPEG-Web web panel — settings, frame preview and hardware status" width="840" />
+  <img src="docs/panel.png" alt="FFMPEG-Web web panel — settings, frame preview and hardware status" width="840" />
 </p>
 
 ## Getting started
@@ -54,25 +54,37 @@ Nothing is claimed without its "before": the picture line reads
 `web/src/recap.ts`; the panel only renders them.
 
 <p align="center">
-  <img src="docs/summary.webp" alt="Summary tab showing before/after recap" width="840" />
+  <img src="docs/summary.png" alt="Summary tab showing before/after recap" width="840" />
 </p>
 
 ### Video settings
 
 <p align="center">
-  <img src="docs/video.webp" alt="Video codec and rate control settings" width="840" />
+  <img src="docs/video.png" alt="Video codec and rate control settings" width="840" />
+</p>
+
+### Audio tracks and encoding
+
+<p align="center">
+  <img src="docs/audio.png" alt="Audio tracks and encoding options" width="840" />
+</p>
+
+### Subtitle tracks and encoding
+
+<p align="center">
+  <img src="docs/subtitle.png" alt="Subtitle tracks and encoding options" width="840" />
+</p>
+
+### Image/Color filters
+
+<p align="center">
+  <img src="docs/filters.png" alt="Image/Color filter options" width="840" />
 </p>
 
 ### Dimensions and pixel format
 
 <p align="center">
-  <img src="docs/dimensions.webp" alt="Picture size and pixel format options" width="840" />
-</p>
-
-### Audio settings
-
-<p align="center">
-  <img src="docs/audio.webp" alt="Audio encoding settings" width="840" />
+  <img src="docs/dimensions.png" alt="Picture size and pixel format options" width="840" />
 </p>
 
 ## Batch encoding
@@ -169,10 +181,10 @@ generates evenly-spaced thumbnails for both sides plus a clickable timeline
 strip; clicking any thumbnail jumps the comparison to that moment.
 
 <p align="center">
-  <img src="docs/preview-01.webp" alt="Frame inspector — source vs target comparison" width="840" />
+  <img src="docs/preview-01.png" alt="Frame inspector — source vs target comparison" width="840" />
 </p>
 <p align="center">
-  <img src="docs/preview-02.webp" alt="Frame inspector — comparison modes" width="840" />
+  <img src="docs/preview-02.png" alt="Frame inspector — comparison modes zoom" width="840" />
 </p>
 
 Frames are cached both in the browser and on the server, keyed off the file's
