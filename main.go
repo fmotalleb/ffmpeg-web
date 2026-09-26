@@ -99,8 +99,12 @@ func main() {
 		context.Background(),
 		logger,
 	)
-	args := varg.New("ffmpeg-web")
-	args.Version(git.String())
+	args := varg.New("ffmpeg-web").
+		About(`A single Go binary that serves a browser UI for transcoding video. Presets,
+a settings panel per topic, batch encoding of whole folders, a queue that
+survives a crash, output verification, and post-encode actions.
+`).
+		Version(git.String())
 	args.String("address", "a", "127.0.0.1:8723", "address to listen on").Env("LISTEN")
 	args.String("root", "r", ".", "directory the browser is allowed to read sources from").Env("BASE_DIR")
 	args.String("out", "o", "./encodes", "directory finished files are written to").Env("OUTPUT_DIR")
@@ -172,9 +176,17 @@ func main() {
 	presetStore.load()
 
 	srv := &server{
-		mediaRoot: mediaRoot, outDir: outDir, uploadDir: uploadDir, workDir: workDir,
-		ffmpeg: ffmpegBin, ffprobe: ffprobeBin,
-		broker: broker, jobs: manager, store: store, presets: presetStore, frames: newFrameCache(256 << 20),
+		mediaRoot: mediaRoot,
+		outDir:    outDir,
+		uploadDir: uploadDir,
+		workDir:   workDir,
+		ffmpeg:    ffmpegBin,
+		ffprobe:   ffprobeBin,
+		broker:    broker,
+		jobs:      manager,
+		store:     store,
+		presets:   presetStore,
+		frames:    newFrameCache(256 << 20),
 		log:       logger.Named("web"),
 		monitor:   newSystemMonitor(),
 		maxUpload: int64(maxUpload),
