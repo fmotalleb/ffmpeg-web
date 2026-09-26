@@ -174,6 +174,8 @@ export interface Job {
   verifyNote: string;
   sourceDeleted: boolean;
   attempts: number;
+  /** The ffmpeg process of the last run, so its log stays reachable. */
+  ffmpegPid?: number;
   error: string;
   queued: string;
   started: string;

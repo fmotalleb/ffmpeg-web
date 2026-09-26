@@ -65,10 +65,11 @@ type Job struct {
 	cancel context.CancelFunc
 	logBuf []string
 
-	// ffmpegPID is the process this job is encoding with, set while it runs and
-	// cleared when it stops. It is not serialized: the PID belongs to this run of
-	// the server, and the queue file is read back after a restart.
-	ffmpegPID int
+	// FfmpegPID is the process this job is encoding with. It is set while the
+	// job runs and kept afterwards, so the log of a finished run — the one worth
+	// reading — stays reachable from the queue. A restored queue clears it,
+	// because the pid only means anything within this run of the server.
+	FfmpegPID int `json:"ffmpegPid,omitempty"`
 }
 
 func (j *Job) clone() Job {
@@ -141,6 +142,7 @@ func (m *Manager) Restore(snap Snapshot) (recovered int) {
 			job.Error = ""
 			recovered++
 		}
+		job.FfmpegPID = 0
 		copyJob := job
 		m.jobs[job.ID] = &copyJob
 	}
@@ -262,8 +264,8 @@ func (m *Manager) ffmpegPIDs() map[string]int {
 	defer m.mu.RUnlock()
 	out := map[string]int{}
 	for id, j := range m.jobs {
-		if j.Status == StatusRunning && j.ffmpegPID != 0 {
-			out[id] = j.ffmpegPID
+		if j.Status == StatusRunning && j.FfmpegPID != 0 {
+			out[id] = j.FfmpegPID
 		}
 	}
 	return out
@@ -762,7 +764,6 @@ func (m *Manager) finish(job *Job, ctx context.Context, runErr error) {
 
 	m.mu.Lock()
 	job.cancel = nil
-	job.ffmpegPID = 0
 	job.Ended = time.Now()
 	job.ETA = 0
 	switch {
@@ -879,7 +880,7 @@ func (m *Manager) exec(ctx context.Context, job *Job, target, passLog string, pa
 		return fmt.Errorf("could not start ffmpeg: %w", err)
 	}
 	m.mu.Lock()
-	job.ffmpegPID = cmd.Process.Pid
+	job.FfmpegPID = cmd.Process.Pid
 	m.mu.Unlock()
 
 	// This run's stderr also goes to workDir/ffmpeg-<pid>.log, keyed by the
