@@ -46,6 +46,7 @@ export const useStore = create<AppState>((set, _get) => ({
   probeUrl: "",
   logViewPid: null,
   logViewTitle: "",
+  processViewPid: null,
   railCollapsed: false,
   queueSettingsOpen: false,
   // The queue is a drawer, not the main view: it starts closed and opens
@@ -207,6 +208,7 @@ export const useStore = create<AppState>((set, _get) => ({
     set({ probeOpen: open, probeTitle: title, probeUrl: url }),
   setLogView: (pid, title = "") =>
     set({ logViewPid: pid, logViewTitle: title }),
+  setProcessViewPid: (pid) => set({ processViewPid: pid }),
   setRailCollapsed: (c) => set({ railCollapsed: c }),
   setQueueSettingsOpen: (o) => set({ queueSettingsOpen: o }),
   setQueueCollapsed: (c) => set({ queueCollapsed: c }),

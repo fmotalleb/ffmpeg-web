@@ -5,6 +5,7 @@ package system
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -513,6 +514,24 @@ func readProcStat(path string) (ffmpegSample, bool) {
 		threads: threads,
 		rss:     rss * uint64(os.Getpagesize()),
 	}, true
+}
+
+// KillFFmpeg stops one live ffmpeg or ffprobe process by pid. The pid must
+// currently be one of those processes — jobPIDs are the encodes the queue
+// started, counted even when their binary is named differently — so a mistyped
+// or recycled number cannot take down something unrelated.
+func KillFFmpeg(pid int, jobPIDs map[string]int) error {
+	if pid <= 0 {
+		return fmt.Errorf("bad pid %d", pid)
+	}
+	if _, ok := readFFmpegProcesses(jobPIDs)[pid]; !ok {
+		return fmt.Errorf("process %d is not a running ffmpeg", pid)
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return p.Kill()
 }
 
 // ---- ffmpeg ----

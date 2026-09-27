@@ -1337,6 +1337,15 @@ a.btn-star:hover {
 
 /* ffmpeg log viewer: a terminal-style tail of one run's output. */
 .log-modal { width: min(880px, 100%); }
+.modal-card.process-modal { width: min(520px, 100%); }
+.proc-facts { display: flex; flex-direction: column; }
+.proc-kill { margin-top: 14px; }
+.proc-confirm {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.proc-confirm-actions { display: flex; gap: 8px; margin-top: 8px; }
 .log-modal .modal-head h2 {
   display: flex;
   align-items: center;

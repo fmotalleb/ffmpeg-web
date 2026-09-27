@@ -4,9 +4,9 @@ import type { FfmpegProcess, FfmpegUsage, Job } from "../../types";
 import { Bar } from "./atoms";
 
 // The live half of the report: what ffmpeg is doing, straight from the process
-// counters, next to what the queue itself says each job is achieving. Each job
-// is shown against the process it is actually encoding with, so a second
-// ffmpeg running on the machine cannot be mistaken for the queue's work.
+// counters, next to what the queue itself says each job is achieving. Every
+// process is listed on its own, so a second ffmpeg running on the machine can
+// be told apart from the queue's own work and inspected on its own.
 export function FfmpegSection({
   usage,
   jobs,
@@ -16,22 +16,23 @@ export function FfmpegSection({
   jobs: Job[];
   cpus: number;
 }) {
-  const idle = !usage?.running && jobs.length === 0;
-  const threads = usage?.processes.reduce((acc, p) => acc + p.threads, 0) ?? 0;
-  const forJob = (id: string) => usage?.processes.find((p) => p.jobId === id) ?? null;
+  const processes = usage?.processes ?? [];
+  const running = processes.length > 0;
+  const threads = processes.reduce((acc, p) => acc + p.threads, 0);
+  const jobFor = (id?: string) => (id ? jobs.find((j) => j.id === id) ?? null : null);
 
   return (
     <section className="hw-section">
       <div className="hw-section-head">
         <span>ffmpeg</span>
         <span>
-          {usage?.running
-            ? `${usage.processes.length} process${usage.processes.length === 1 ? "" : "es"}`
+          {running
+            ? `${processes.length} process${processes.length === 1 ? "" : "es"}`
             : "idle"}
         </span>
       </div>
 
-      {idle ? (
+      {!running ? (
         <p className="hw-note">Nothing is encoding right now.</p>
       ) : (
         <>
@@ -50,37 +51,16 @@ export function FfmpegSection({
               <span className="hw-value">{Math.round(usage.cpu)}%</span>
             </div>
           )}
-          {usage?.running && (
-            <>
-              <div className="hw-row">
-                <span>Memory</span>
-                <span className="hw-value">{formatBytes(usage.rss)}</span>
-              </div>
-              <div className="hw-row">
-                <span>Threads</span>
-                <span className="hw-value">{threads}</span>
-              </div>
-            </>
-          )}
-          {jobs.map((job) => (
-            <div className="hw-job" key={job.id}>
-              <div className="hw-row">
-                <span title={job.label || job.source}>
-                  {baseName(job.label || job.source)}
-                </span>
-                <span className="hw-value strong">
-                  {[
-                    `${Math.round(job.progress * 100)}%`,
-                    job.fps > 0 ? `${Math.round(job.fps)} fps` : "",
-                    job.speed > 0 ? `${job.speed.toFixed(2)}\u00d7` : "",
-                    job.eta > 0 ? `${formatDuration(job.eta)} left` : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" \u00b7 ")}
-                </span>
-              </div>
-              <ProcessFacts proc={forJob(job.id)} cpus={cpus} />
-            </div>
+          <div className="hw-row">
+            <span>Memory</span>
+            <span className="hw-value">{formatBytes(usage?.rss ?? 0)}</span>
+          </div>
+          <div className="hw-row">
+            <span>Threads</span>
+            <span className="hw-value">{threads}</span>
+          </div>
+          {processes.map((proc) => (
+            <ProcessRow key={proc.pid} proc={proc} cpus={cpus} job={jobFor(proc.jobId)} />
           ))}
         </>
       )}
@@ -88,41 +68,60 @@ export function FfmpegSection({
   );
 }
 
-// ProcessFacts describes one ffmpeg process: its pid, what it costs and how
-// wide it runs. Everything shown here is read off that pid.
-function ProcessFacts({ proc, cpus }: { proc: FfmpegProcess | null; cpus: number }) {
-  const openLog = () =>
-    useStore.getState().setLogView(proc!.pid, `pid ${proc!.pid}`);
-  if (!proc) {
-    return (
-      <div className="hw-row hw-sub">
-        <span>process</span>
-        <span className="hw-value">starting&hellip;</span>
-      </div>
-    );
-  }
+// ProcessRow is one ffmpeg or ffprobe process: what it is encoding, if anything,
+// then that process's own pid, CPU and memory. Details opens the process
+// viewer, Log tails its own log file.
+function ProcessRow({ proc, cpus, job }: { proc: FfmpegProcess; cpus: number; job: Job | null }) {
+  const setProcessViewPid = useStore((s) => s.setProcessViewPid);
+  const setLogView = useStore((s) => s.setLogView);
+
+  const title = job ? baseName(job.label || job.source) : `${proc.kind} process`;
+  const progress = job
+    ? [
+        `${Math.round(job.progress * 100)}%`,
+        job.fps > 0 ? `${Math.round(job.fps)} fps` : "",
+        job.speed > 0 ? `${job.speed.toFixed(2)}\u00d7` : "",
+        job.eta > 0 ? `${formatDuration(job.eta)} left` : "",
+      ]
+        .filter(Boolean)
+        .join(" \u00b7 ")
+    : `pid ${proc.pid}`;
+
   return (
-    <div className="hw-row hw-sub">
-      <span className="hw-pid">
-        ffmpeg pid {proc.pid}
-        <button
-          className="btn btn-small btn-quiet hw-log-btn"
-          title="Tail this ffmpeg process's log"
-          onClick={openLog}
-        >
-          Log
-        </button>
-      </span>
-      <span className="hw-value">
-        {[
-          proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026",
-          cpus > 1 && proc.sampled ? `${(proc.cpu / cpus).toFixed(1)}% of this machine` : "",
-          formatBytes(proc.rss),
-          `${proc.threads} threads`,
-        ]
-          .filter(Boolean)
-          .join(" \u00b7 ")}
-      </span>
+    <div className="hw-job">
+      <div className="hw-row">
+        <span title={job?.label || job?.source}>{title}</span>
+        <span className="hw-value strong">{progress}</span>
+      </div>
+      <div className="hw-row hw-sub">
+        <span className="hw-pid">
+          {proc.kind} pid {proc.pid}
+          <button
+            className="btn btn-small btn-quiet hw-log-btn"
+            title="Tail this process's log"
+            onClick={() => setLogView(proc.pid, `pid ${proc.pid}`)}
+          >
+            Log
+          </button>
+          <button
+            className="btn btn-small btn-quiet hw-log-btn"
+            title="Show this process's details"
+            onClick={() => setProcessViewPid(proc.pid)}
+          >
+            Details
+          </button>
+        </span>
+        <span className="hw-value">
+          {[
+            proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026",
+            cpus > 1 && proc.sampled ? `${(proc.cpu / cpus).toFixed(1)}% of this machine` : "",
+            `RAM ${formatBytes(proc.rss)}`,
+            `${proc.threads} threads`,
+          ]
+            .filter(Boolean)
+            .join(" \u00b7 ")}
+        </span>
+      </div>
     </div>
   );
 }

@@ -50,6 +50,7 @@ export interface AppState {
   probeUrl: string;
   logViewPid: number | null;
   logViewTitle: string;
+  processViewPid: number | null;
   railCollapsed: boolean;
   queueSettingsOpen: boolean;
   queueCollapsed: boolean;
@@ -85,6 +86,7 @@ export interface AppState {
   setBatchDir: (dir: string | null) => void;
   setProbe: (open: boolean, title?: string, url?: string) => void;
   setLogView: (pid: number | null, title?: string) => void;
+  setProcessViewPid: (pid: number | null) => void;
   setRailCollapsed: (c: boolean) => void;
   setQueueSettingsOpen: (o: boolean) => void;
   setQueueCollapsed: (c: boolean) => void;

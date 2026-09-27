@@ -153,6 +153,7 @@ func (s *server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/encoders", s.handleEncoders)
 	mux.HandleFunc("GET /api/system", s.handleSystem)
 	mux.HandleFunc("GET /api/ffmpeg/{pid}/log", s.handleFfmpegLog)
+	mux.HandleFunc("POST /api/ffmpeg/{pid}/kill", s.handleKillFfmpeg)
 
 	mux.HandleFunc("GET /api/jobs", s.handleListJobs)
 	mux.HandleFunc("POST /api/jobs", s.handleCreateJob)
