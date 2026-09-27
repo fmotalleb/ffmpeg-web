@@ -57,9 +57,9 @@ export const useStore = create<AppState>((set, _get) => ({
     set((s) => {
       const settings = structuredClone(s.settings);
       settings.input = info.path;
-      if (!settings.outputName) {
-        settings.outputName = info.name.replace(/\.[^.]+$/, "");
-      }
+      // A new file gets a new name: the "save as" box follows the file being
+      // worked on, instead of keeping whatever was typed for the last one.
+      settings.outputName = info.name.replace(/\.[^.]+$/, "");
       // A different file means different timings: the trim range goes back to
       // the whole clip and the preview timeline starts over, so neither keeps
       // pointing at a moment the new file may not even have.
