@@ -22,3 +22,14 @@ func (s *server) handleKillFfmpeg(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// handleKillAllFfmpeg stops every ffmpeg and ffprobe process on the machine and
+// reports how many went down.
+func (s *server) handleKillAllFfmpeg(w http.ResponseWriter, r *http.Request) {
+	killed, err := system.KillAllFFmpeg(s.jobs.FfmpegPIDs())
+	if err != nil && killed == 0 {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"killed": killed})
+}

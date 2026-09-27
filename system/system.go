@@ -534,6 +534,28 @@ func KillFFmpeg(pid int, jobPIDs map[string]int) error {
 	return p.Kill()
 }
 
+// KillAllFFmpeg stops every ffmpeg and ffprobe process on the machine, plus any
+// encode the queue started. It returns how many were stopped and the first
+// error, if any, so one stubborn process does not hide the rest.
+func KillAllFFmpeg(jobPIDs map[string]int) (int, error) {
+	killed := 0
+	var firstErr error
+	for pid := range readFFmpegProcesses(jobPIDs) {
+		p, err := os.FindProcess(pid)
+		if err == nil {
+			err = p.Kill()
+		}
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		killed++
+	}
+	return killed, firstErr
+}
+
 // ---- ffmpeg ----
 
 var (

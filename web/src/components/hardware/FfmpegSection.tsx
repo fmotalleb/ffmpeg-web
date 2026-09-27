@@ -1,4 +1,5 @@
 import { useStore } from "../../store";
+import { api, toast } from "../../api";
 import { baseName, formatBytes, formatDuration } from "../../utils";
 import type { FfmpegProcess, FfmpegUsage, Job } from "../../types";
 import { Bar } from "./atoms";
@@ -6,7 +7,7 @@ import { Bar } from "./atoms";
 // The live half of the report: what ffmpeg is doing, straight from the process
 // counters, next to what the queue itself says each job is achieving. Every
 // process is listed on its own, so a second ffmpeg running on the machine can
-// be told apart from the queue's own work and inspected on its own.
+// be told apart from the queue's own work and stopped on its own.
 export function FfmpegSection({
   usage,
   jobs,
@@ -21,14 +22,38 @@ export function FfmpegSection({
   const threads = processes.reduce((acc, p) => acc + p.threads, 0);
   const jobFor = (id?: string) => (id ? jobs.find((j) => j.id === id) ?? null : null);
 
+  const killAll = async () => {
+    if (
+      !confirm(
+        "Kill every ffmpeg process on this machine?\n\nAny encode in progress will fail.",
+      )
+    )
+      return;
+    try {
+      const res = await api<{ killed: number }>("/api/ffmpeg/kill-all", { method: "POST" });
+      toast(`Stopped ${res.killed} ffmpeg process${res.killed === 1 ? "" : "es"}`, true);
+    } catch (err: unknown) {
+      toast((err as Error).message);
+    }
+  };
+
   return (
     <section className="hw-section">
       <div className="hw-section-head">
         <span>ffmpeg</span>
-        <span>
+        <span className="hw-section-tools">
           {running
             ? `${processes.length} process${processes.length === 1 ? "" : "es"}`
             : "idle"}
+          {running && (
+            <button
+              className="btn btn-small btn-quiet hw-kill-all"
+              title="Stop every ffmpeg process on this machine"
+              onClick={killAll}
+            >
+              Kill all
+            </button>
+          )}
         </span>
       </div>
 
