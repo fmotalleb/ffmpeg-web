@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"net"
@@ -27,9 +26,6 @@ import (
 	"github.com/fmotalleb/ffmpeg-web/system"
 )
 
-//go:embed web-dist
-var webAssets embed.FS
-
 func main() {
 	logger := log.
 		NewBuilder().
@@ -44,96 +40,54 @@ func main() {
 		logger,
 	)
 
-	args := varg.New("ffmpeg-web").
-		About(`A single Go binary that serves a browser UI for transcoding video. Presets,
-a settings panel per topic, batch encoding of whole folders, a queue that
-survives a crash, output verification, and post-encode actions.
-`).
-		Version(git.String())
-	args.String("address", "a", "127.0.0.1:8723", "address to listen on").Env("LISTEN")
-	args.String("root", "r", ".", "directory the browser is allowed to read sources from").Env("BASE_DIR")
-	args.String("out", "o", "./encodes", "directory finished files are written to").Env("OUTPUT_DIR")
-	args.String("queue", "q", "", "queue file (default: <out>/queue.json)").Env("QUEUE_FILE")
-	args.String("ffmpeg", "", "ffmpeg", "path to the ffmpeg binary").Env("FFMPEG_PATH")
-	args.String("ffprobe", "", "ffprobe", "path to the ffprobe binary").Env("FFPROBE_PATH")
-	args.Uint64("max-upload", "", 16<<30, "largest accepted upload in bytes").Env("MAX_UPLOAD_SIZE")
-	args.Bool("allow-commands", "", false, "let the post-queue action run a shell command").Env("ALLOW_COMMAND")
-
-	args.String("basic-auth", "u", "", "basic auth value `username:password`").Env("BASIC_AUTH")
-	must := func(err error) {
-		if err != nil {
-			logger.Fatal("startup failed", zap.Error(err))
-		}
+	// Parse command-line arguments using struct-based configuration
+	cfg, err := parseConfig(logger)
+	if err != nil {
+		logger.Fatal("failed to parse configuration", zap.Error(err))
 	}
 
-	r := args.Handle(os.Args)
-	if r.ShouldExit {
-		must(r.Err)
-		fmt.Println(r.Output)
-		os.Exit(0)
-	}
-	cfg := r.Config
-
-	addr := cfg.String("address")
-	root := cfg.String("root")
-	out := cfg.String("out")
-	queueFile := cfg.String("queue")
-	ffmpegBin := cfg.String("ffmpeg")
-	ffprobeBin := cfg.String("ffprobe")
-	maxUpload := cfg.Uint64("max-upload")
-	allowCmds := cfg.Bool("allow-commands")
-	basicAuth := cfg.String("basic-auth")
-	auth := []string{"", ""}
-	if basicAuth != "" {
-		auth = strings.SplitN(basicAuth, ":", 2)
-		if len(auth) != 2 {
-			must(errors.New("auth field must be `user:pass`, only user given"))
-		}
-	}
-	mediaRoot, err := filepath.Abs(root)
-	must(err)
-	outDir, err := filepath.Abs(out)
-	must(err)
-	must(os.MkdirAll(outDir, 0o755))
-	uploadDir := filepath.Join(outDir, ".uploads")
-	workDir := filepath.Join(outDir, ".work")
-	must(os.MkdirAll(uploadDir, 0o755))
-	must(os.MkdirAll(workDir, 0o755))
-
-	for _, bin := range []string{ffmpegBin, ffprobeBin} {
-		if _, err := exec.LookPath(bin); err != nil {
-			logger.Fatal("required binary not found on PATH — install ffmpeg, or pass -ffmpeg/-ffprobe",
-				zap.String("binary", bin))
-		}
+	// Process and validate configuration
+	processed, err := processConfig(cfg, logger)
+	if err != nil {
+		logger.Fatal("configuration error", zap.Error(err))
 	}
 
-	ffmpeg.ProbeEncoders(ffmpegBin)
+	// Probe ffmpeg for available encoders
+	ffmpeg.ProbeEncoders(processed.FFmpeg)
 
-	queuePath := queueFile
-	if queuePath == "" {
-		queuePath = filepath.Join(outDir, "queue.json")
-	}
-	store := storage.NewStore(queuePath, logger.Named("store"))
+	// Load or create job storage
+	store := storage.NewStore(processed.QueueFile, logger.Named("store"))
 	snap, err := store.Load()
-	must(err)
+	if err != nil {
+		logger.Fatal("failed to load queue", zap.Error(err))
+	}
 
+	// Initialize job management
 	broker := jobs.NewBroker()
-	hooks := jobs.NewHookRunner(logger.Named("hooks"), allowCmds, outDir)
-	manager := jobs.NewManager(ffmpegBin, ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
+	hooks := jobs.NewHookRunner(logger.Named("hooks"), processed.AllowCmds, processed.OutDir)
+	manager := jobs.NewManager(
+		processed.FFmpeg, processed.FFProbe, processed.WorkDir,
+		broker, store, hooks, logger.Named("queue"),
+	)
 	recovered := manager.Restore(snap)
 	store.Start(manager.Snapshot)
 	manager.Start()
 
-	presetStore := storage.NewPresetStore(filepath.Join(outDir, "presets.json"), logger.Named("presets"))
+	// Load presets
+	presetStore := storage.NewPresetStore(
+		filepath.Join(processed.OutDir, "presets.json"),
+		logger.Named("presets"),
+	)
 	presetStore.Load()
 
+	// Configure and create HTTP server
 	srv := server.New(server.Config{
-		MediaRoot: mediaRoot,
-		OutDir:    outDir,
-		UploadDir: uploadDir,
-		WorkDir:   workDir,
-		FFmpeg:    ffmpegBin,
-		FFprobe:   ffprobeBin,
+		MediaRoot: processed.MediaRoot,
+		OutDir:    processed.OutDir,
+		UploadDir: processed.UploadDir,
+		WorkDir:   processed.WorkDir,
+		FFmpeg:    processed.FFmpeg,
+		FFprobe:   processed.FFProbe,
 		Jobs:      manager,
 		Broker:    broker,
 		Store:     store,
@@ -142,15 +96,15 @@ survives a crash, output verification, and post-encode actions.
 		Monitor:   system.NewMonitor(),
 		Assets:    webAssets,
 		Log:       logger.Named("web"),
-		MaxUpload: int64(maxUpload),
-		AllowCmds: allowCmds,
-
-		AuthUser: auth[0],
-		AuthPass: auth[1],
+		MaxUpload: int64(processed.MaxUpload),
+		AllowCmds: processed.AllowCmds,
+		AuthUser:  processed.AuthUser,
+		AuthPass:  processed.AuthPass,
 	})
 
+	// Create HTTP server
 	httpSrv := &http.Server{
-		Addr:              addr,
+		Addr:              processed.Address,
 		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(_ net.Listener) context.Context {
@@ -158,30 +112,138 @@ survives a crash, output verification, and post-encode actions.
 		},
 	}
 
+	// Start server in background
 	go func() {
 		logger.Info("ffmpeg-web", zap.String("version", git.String()))
-		logger.Info("sources", zap.String("path", mediaRoot))
-		logger.Info("encodes", zap.String("path", outDir))
-		logger.Info("queue", zap.String("file", queuePath), zap.Int("jobs", len(snap.Jobs)))
+		logger.Info("sources", zap.String("path", processed.MediaRoot))
+		logger.Info("encodes", zap.String("path", processed.OutDir))
+		logger.Info("queue", zap.String("file", processed.QueueFile), zap.Int("jobs", len(snap.Jobs)))
 		if recovered > 0 {
-			logger.Info("recovered interrupted jobs — their partial output was deleted and they will run again",
-				zap.Int("count", recovered))
+			logger.Info("recovered interrupted jobs",
+				zap.String("info", "their partial output was deleted and they will run again"),
+				zap.Int("count", recovered),
+			)
 		}
-		logger.Info("listening", zap.String("addr", addr))
+		logger.Info("listening", zap.String("addr", processed.Address))
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("http server failed", zap.Error(err))
 		}
 	}()
 
+	// Wait for shutdown signal
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	<-stop
+
+	// Graceful shutdown
 	logger.Info("shutting down, saving the queue")
-	// A frozen encode would outlive this server as a stopped process nothing
-	// can wake up, so let it run on like any other interrupted job.
 	manager.ThawFrozen()
 	store.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+// parseConfig parses command-line arguments and environment variables into a Config struct
+func parseConfig(logger *zap.Logger) (*Config, error) {
+	cfg := &Config{}
+	fs := varg.New("ffmpeg-web").
+		About(`A single Go binary that serves a browser UI for transcoding video. Presets,
+a settings panel per topic, batch encoding of whole folders, a queue that
+survives a crash, output verification, and post-encode actions.`).
+		Version(git.String())
+
+	// Register config struct fields as flags
+	if err := fs.Struct(cfg); err != nil {
+		return nil, fmt.Errorf("failed to register config: %w", err)
+	}
+
+	// Parse command-line arguments
+	result := fs.Handle(os.Args[1:])
+	if result.Err != nil {
+		return nil, fmt.Errorf("failed to parse arguments: %w", result.Err)
+	}
+
+	// Handle help/version requests
+	if result.ShouldExit {
+		fmt.Println(result.Output)
+		os.Exit(0)
+	}
+
+	// Unmarshal parsed arguments into config struct
+	if err := result.Config.Unmarshal(cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	return cfg, nil
+}
+
+// processConfig validates and processes the raw configuration
+func processConfig(cfg *Config, logger *zap.Logger) (*ProcessedConfig, error) {
+	// Convert paths to absolute paths
+	mediaRoot, err := filepath.Abs(cfg.Root)
+	if err != nil {
+		return nil, fmt.Errorf("invalid root path %q: %w", cfg.Root, err)
+	}
+
+	outDir, err := filepath.Abs(cfg.Out)
+	if err != nil {
+		return nil, fmt.Errorf("invalid output directory %q: %w", cfg.Out, err)
+	}
+
+	// Determine queue file path
+	queueFile := cfg.Queue
+	if queueFile == "" {
+		queueFile = filepath.Join(outDir, "queue.json")
+	}
+
+	// Create necessary directories
+	uploadDir := filepath.Join(outDir, ".uploads")
+	workDir := filepath.Join(outDir, ".work")
+
+	for dir, name := range map[string]string{
+		outDir:    "output",
+		uploadDir: "upload",
+		workDir:   "work",
+	} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, fmt.Errorf("failed to create %s directory %q: %w", name, dir, err)
+		}
+	}
+
+	// Verify binary paths
+	for _, bin := range []string{cfg.FFmpeg, cfg.FFProbe} {
+		if _, err := exec.LookPath(bin); err != nil {
+			return nil, fmt.Errorf(
+				"required binary %q not found on PATH — install ffmpeg, or pass --ffmpeg/--ffprobe: %w",
+				bin, err,
+			)
+		}
+	}
+
+	// Parse and validate basic auth credentials
+	authUser, authPass := "", ""
+	if cfg.BasicAuth != "" {
+		parts := strings.SplitN(cfg.BasicAuth, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, errors.New("--basic-auth must be in format 'username:password' with both non-empty")
+		}
+		authUser = parts[0]
+		authPass = parts[1]
+	}
+
+	return &ProcessedConfig{
+		Address:   cfg.Address,
+		MediaRoot: mediaRoot,
+		OutDir:    outDir,
+		UploadDir: uploadDir,
+		WorkDir:   workDir,
+		QueueFile: queueFile,
+		FFmpeg:    cfg.FFmpeg,
+		FFProbe:   cfg.FFProbe,
+		MaxUpload: cfg.MaxUpload,
+		AllowCmds: cfg.AllowCommands,
+		AuthUser:  authUser,
+		AuthPass:  authPass,
+	}, nil
 }
