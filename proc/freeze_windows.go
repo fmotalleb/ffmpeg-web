@@ -1,6 +1,6 @@
 //go:build windows
 
-package main
+package proc
 
 import (
 	"fmt"
@@ -20,10 +20,10 @@ var (
 // package does not name it.
 const processSuspendResume = 0x0800
 
-// setProcessFrozen holds a process still in place, or lets it run on again.
+// SetFrozen holds a process still in place, or lets it run on again.
 // Best effort — a process that has just exited cannot be signaled, and that
 // needs no handling.
-func setProcessFrozen(pid int, frozen bool) error {
+func SetFrozen(pid int, frozen bool) error {
 	h, err := syscall.OpenProcess(processSuspendResume, false, uint32(pid))
 	if err != nil {
 		return err

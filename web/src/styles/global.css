@@ -109,8 +109,12 @@ input[type="checkbox"] {
   appearance: none;
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  flex: none;
+  aspect-ratio: 1;
   border: 1.5px solid var(--line);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bg);
   cursor: pointer;
   position: relative;
@@ -350,6 +354,14 @@ a.btn-star:hover {
   padding-bottom: 4px;
 }
 .hw-note { font-size: 12.5px; color: var(--ink-dim); margin: 0; }
+.hw-section-tools { display: inline-flex; align-items: center; gap: 8px; }
+.hw-kill-all {
+  padding: 1px 8px;
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--rose);
+}
 
 .hw-row {
   display: flex;
@@ -605,6 +617,13 @@ a.btn-star:hover {
   color: var(--amber);
 }
 .preset-save .btn { justify-content: center; }
+.preset-empty {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-dim);
+}
 
 .work {
   display: grid;
@@ -1326,6 +1345,15 @@ a.btn-star:hover {
 
 /* ffmpeg log viewer: a terminal-style tail of one run's output. */
 .log-modal { width: min(880px, 100%); }
+.modal-card.process-modal { width: min(520px, 100%); }
+.proc-facts { display: flex; flex-direction: column; }
+.proc-kill { margin-top: 14px; }
+.proc-confirm {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.proc-confirm-actions { display: flex; gap: 8px; margin-top: 8px; }
 .log-modal .modal-head h2 {
   display: flex;
   align-items: center;

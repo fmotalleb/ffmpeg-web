@@ -1,4 +1,7 @@
-package main
+// Package storage owns the persisted queue model and the presets: the Job and
+// Snapshot types, the queue settings, and the atomic writers that keep them on
+// disk across a restart.
+package storage
 
 import (
 	"encoding/json"
@@ -11,7 +14,9 @@ import (
 	"go.uber.org/zap"
 )
 
-const snapshotVersion = 1
+// SnapshotVersion is the format of the queue file. It is written on every save
+// so an older file can be recognized.
+const SnapshotVersion = 1
 
 // Snapshot is everything that has to survive a restart.
 type Snapshot struct {
@@ -37,7 +42,7 @@ type Hook struct {
 	URL     string `json:"url"`
 }
 
-func defaultSettings() QueueSettings {
+func DefaultSettings() QueueSettings {
 	return QueueSettings{
 		VerifyOutput:    true,
 		ShrinkThreshold: 20,
@@ -97,7 +102,7 @@ func (s *Store) Flush() {
 }
 
 func (s *Store) write(snap Snapshot) error {
-	snap.Version = snapshotVersion
+	snap.Version = SnapshotVersion
 	snap.SavedAt = time.Now()
 	body, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
@@ -117,7 +122,7 @@ func (s *Store) Load() (Snapshot, error) {
 	var snap Snapshot
 	body, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
-		return Snapshot{Settings: defaultSettings(), Paused: false}, nil
+		return Snapshot{Settings: DefaultSettings(), Paused: false}, nil
 	}
 	if err != nil {
 		return snap, err
@@ -129,7 +134,7 @@ func (s *Store) Load() (Snapshot, error) {
 		s.log.Warn("queue file was unreadable, moved it aside",
 			zap.String("backup", backup), zap.Error(err))
 		//nolint:nilerr // starting with an empty queue beats refusing to start
-		return Snapshot{Settings: defaultSettings()}, nil
+		return Snapshot{Settings: DefaultSettings()}, nil
 	}
 	if snap.Settings.ShrinkThreshold == 0 {
 		snap.Settings.ShrinkThreshold = 20

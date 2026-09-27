@@ -1,4 +1,4 @@
-package main
+package ffmpeg
 
 import (
 	"bytes"
@@ -10,12 +10,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fmotalleb/ffmpeg-web/proc"
 )
 
 const (
-	frameTimeout   = 20 * time.Second
-	clipTimeout    = 30 * time.Second
-	defaultClipDur = 0.5
+	frameTimeout = 20 * time.Second
+	clipTimeout  = 30 * time.Second
+
+	// DefaultClipDur is how long a preview clip is when the caller does not say.
+	DefaultClipDur = 0.5
 )
 
 // seekTimes gives the timestamps to try for one requested moment, starting at
@@ -47,9 +51,9 @@ func evenWidth(w int) int {
 	return w - w%2
 }
 
-// extractFrame grabs one JPEG frame straight from a file at the given time —
+// ExtractFrame grabs one JPEG frame straight from a file at the given time —
 // used for the untouched source, and for a finished job's actual output.
-func extractFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int) ([]byte, error) {
+func ExtractFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int) ([]byte, error) {
 	return runFrameExtract(ctx, ffmpegBin, path, atSeconds, width, "")
 }
 
@@ -63,7 +67,7 @@ const previewEncodeFrames = 60
 // full spec (codec, bitrate, quality, filters) into a temporary file, then
 // extracts a single JPEG frame from it. The result shows what the final
 // encode will actually look like, including compression artifacts.
-func encodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, spec Spec, workDir string) ([]byte, error) {
+func EncodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds float64, width int, spec Spec, workDir string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -97,7 +101,7 @@ func encodePreviewFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds
 	seekSpec.Trim.Start = math.Max(0, atSeconds-0.5)
 	seekSpec.Trim.End = 0 // no duration limit; -frames:v stops the encode
 
-	args, err := buildArgs(seekSpec, path, tmpPath, "", 0)
+	args, err := BuildArgs(seekSpec, path, tmpPath, "", 0)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +111,7 @@ func encodePreviewFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds
 	args = args[:len(args)-1]
 	args = append(args, "-frames:v", strconv.Itoa(previewEncodeFrames), output)
 
-	cmd := execCMD(ctx, ffmpegBin, args...)
+	cmd := proc.Exec(ctx, ffmpegBin, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -178,7 +182,7 @@ func extractFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds float
 	}
 	args = append(args, "-frames:v", "1", "-q:v", "2", "-strict", "-1", "-f", "mjpeg", "pipe:1")
 
-	cmd := execCMD(ctx, ffmpegBin, args...)
+	cmd := proc.Exec(ctx, ffmpegBin, args...)
 	var out, stderr bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &stderr
@@ -194,10 +198,10 @@ func extractFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds float
 
 // ---- clip extraction ----
 
-// extractClip cuts a short segment from a file starting at atSeconds,
+// ExtractClip cuts a short segment from a file starting at atSeconds,
 // copying streams without re-encoding. The result is an MP4 suitable for
 // inline browser playback.
-func extractClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, width int) ([]byte, error) {
+func ExtractClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, width int) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 
@@ -235,7 +239,7 @@ func extractClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSe
 	}
 	args = append(args, tmpPath)
 
-	cmd := execCMD(ctx, ffmpegBin, args...)
+	cmd := proc.Exec(ctx, ffmpegBin, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -261,15 +265,15 @@ func extractClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSe
 // lands past the end of the source, and a header-only MP4 would play back as
 // a broken preview.
 func clipHasVideo(ctx context.Context, ffprobeBin, path string) bool {
-	cmd := execCMD(ctx, ffprobeBin, "-v", "error",
+	cmd := proc.Exec(ctx, ffprobeBin, "-v", "error",
 		"-select_streams", "v", "-show_entries", "stream=codec_type", "-of", "csv=p=0", path)
 	out, err := cmd.CombinedOutput()
 	return err == nil && bytes.Contains(out, []byte("video"))
 }
 
-// encodePreviewClip encodes a short segment around atSeconds using the
+// EncodePreviewClip encodes a short segment around atSeconds using the
 // full spec (codec, bitrate, quality, filters) into an MP4 clip.
-func encodePreviewClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
+func EncodePreviewClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeconds, duration float64, spec Spec, workDir string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, clipTimeout)
 	defer cancel()
 
@@ -301,12 +305,12 @@ func encodePreviewClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string
 	seekSpec.Trim.Start = atSeconds
 	seekSpec.Trim.End = atSeconds + duration
 
-	args, err := buildArgs(seekSpec, path, tmpPath, "", 0)
+	args, err := BuildArgs(seekSpec, path, tmpPath, "", 0)
 	if err != nil {
 		return nil, err
 	}
 
-	cmd := execCMD(ctx, ffmpegBin, args...)
+	cmd := proc.Exec(ctx, ffmpegBin, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -331,7 +335,7 @@ func encodePreviewClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string
 // timestamp, the width, and any filters applied) turns repeat requests into a
 // map lookup. A file being re-encoded gets a new mtime/size, so its cache
 // entries fall out on their own rather than serving stale frames.
-type frameCache struct {
+type FrameCache struct {
 	mu       sync.Mutex
 	entries  map[string][]byte
 	order    []string
@@ -339,11 +343,11 @@ type frameCache struct {
 	maxBytes int64
 }
 
-func newFrameCache(maxBytes int64) *frameCache {
-	return &frameCache{entries: map[string][]byte{}, maxBytes: maxBytes}
+func NewFrameCache(maxBytes int64) *FrameCache {
+	return &FrameCache{entries: map[string][]byte{}, maxBytes: maxBytes}
 }
 
-func (c *frameCache) getOrCompute(key string, compute func() ([]byte, error)) ([]byte, error) {
+func (c *FrameCache) getOrCompute(key string, compute func() ([]byte, error)) ([]byte, error) {
 	c.mu.Lock()
 	if data, ok := c.entries[key]; ok {
 		c.mu.Unlock()
@@ -378,14 +382,14 @@ func frameCacheKey(path string, mtimeUnixNano, size int64, atSeconds float64, wi
 	return fmt.Sprintf("%s|%d|%d|%.2f|%d|%s", path, mtimeUnixNano, size, atSeconds, width, filters)
 }
 
-// cachedFrame looks up a frame by the file's current identity before falling
+// Get looks up a frame by the file's current identity before falling
 // back to compute. If the file can't be stat'd, it just computes directly —
 // caching is an optimization, never a requirement for correctness.
-func (s *server) cachedFrame(path string, atSeconds float64, width int, filters string, compute func() ([]byte, error)) ([]byte, error) {
+func (c *FrameCache) Get(path string, atSeconds float64, width int, filters string, compute func() ([]byte, error)) ([]byte, error) {
 	st, err := os.Stat(path)
 	if err != nil {
 		return compute()
 	}
 	key := frameCacheKey(path, st.ModTime().UnixNano(), st.Size(), atSeconds, width, filters)
-	return s.frames.getOrCompute(key, compute)
+	return c.getOrCompute(key, compute)
 }

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useStore } from "../store";
 import { api, toast } from "../api";
-import { HardwareStatus } from "./HardwareStatus";
+import { HardwareStatus } from "./hardware";
 import { Icon } from "./icons";
 import type { MediaInfo } from "../types";
 

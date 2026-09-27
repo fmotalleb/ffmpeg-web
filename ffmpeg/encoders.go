@@ -1,15 +1,15 @@
-package main
+package ffmpeg
 
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/fmotalleb/ffmpeg-web/proc"
 )
 
 // Every codec can be produced by more than one encoder library. The software
@@ -20,8 +20,8 @@ import (
 // The UI shows this list under the encoder picker and stores the chosen entry
 // in Spec.Video.Library.
 
-// encoderLib is one selectable implementation of a codec.
-type encoderLib struct {
+// EncoderLib is one selectable implementation of a codec.
+type EncoderLib struct {
 	ID     string `json:"id"`     // sw | nvenc | qsv | vaapi | videotoolbox | amf
 	Codec  string `json:"codec"`  // h264 | hevc | av1 | vp9
 	Name   string `json:"name"`   // shown in the picker
@@ -42,17 +42,18 @@ type encoderLib struct {
 	Available   bool   `json:"available"`
 	Unavailable string `json:"unavailableReason,omitempty"`
 
-	engine string // software | nvenc | qsv | vaapi | videotoolbox | amf
+	Engine string `json:"-"` // software | nvenc | qsv | vaapi | videotoolbox | amf
 }
 
-// encoderKind explains a whole group of libraries to the user.
-type encoderKind struct {
+// EncoderKind explains a whole group of libraries to the user.
+type EncoderKind struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	Blurb string `json:"blurb"`
 }
 
-var encoderKinds = []encoderKind{
+// EncoderKinds are the two groups the picker is split into.
+var EncoderKinds = []EncoderKind{
 	{
 		ID:    "cpu",
 		Label: "CPU (software)",
@@ -75,10 +76,10 @@ var codecForEncoder = map[string]string{
 	"copy": "copy",
 }
 
-func lib(codec, id, name, ffmpeg, kind, vendor, engine, note string, qMax, qGood float64) encoderLib {
-	l := encoderLib{
+func lib(codec, id, name, ffmpeg, kind, vendor, engine, note string, qMax, qGood float64) EncoderLib {
+	l := EncoderLib{
 		ID: id, Codec: codec, Name: name, FFmpeg: ffmpeg,
-		Kind: kind, Vendor: vendor, engine: engine, Note: note,
+		Kind: kind, Vendor: vendor, Engine: engine, Note: note,
 		QualityMax: qMax, QualityGood: qGood,
 	}
 	l.SupportsSpeed = engine != "vaapi" && engine != "videotoolbox"
@@ -90,14 +91,14 @@ func lib(codec, id, name, ffmpeg, kind, vendor, engine, note string, qMax, qGood
 
 // qt flags a library whose quality scale runs the other way: for Apple's
 // VideoToolbox a higher -q:v means better quality, not worse.
-func qt(l encoderLib) encoderLib {
+func qt(l EncoderLib) EncoderLib {
 	l.QualityInverted = true
 	return l
 }
 
-// encoderLibs is the whole catalog. Order matters: the software entry is the
-// default one for its codec and comes first.
-var encoderLibs = []encoderLib{
+// Libs is the whole catalog. Order matters: the software entry is the default
+// one for its codec and comes first.
+var Libs = []EncoderLib{
 	// ---- H.264 ----
 	lib("h264", "sw", "x264 (software)", "libx264", "cpu", "", "software",
 		"Runs several threads on the CPU. The best quality per bit, slowest of the bunch, and the only option that supports three passes of tuning.",
@@ -158,9 +159,9 @@ var encoderLibs = []encoderLib{
 		63, 33),
 }
 
-func librariesForCodec(codec string) []encoderLib {
-	out := make([]encoderLib, 0, 3)
-	for _, l := range encoderLibs {
+func librariesForCodec(codec string) []EncoderLib {
+	out := make([]EncoderLib, 0, 3)
+	for _, l := range Libs {
 		if l.Codec == codec {
 			out = append(out, l)
 		}
@@ -171,10 +172,10 @@ func librariesForCodec(codec string) []encoderLib {
 // resolveLibrary looks up the library a spec asked for. An empty or unknown id
 // falls back to the software entry, which keeps queue files and presets written
 // before libraries existed working unchanged.
-func resolveLibrary(id, encoder string) (encoderLib, bool) {
+func resolveLibrary(id, encoder string) (EncoderLib, bool) {
 	codec := codecForEncoder[encoder]
 	if codec == "" || codec == "copy" {
-		return encoderLib{}, false
+		return EncoderLib{}, false
 	}
 	for _, l := range librariesForCodec(codec) {
 		if l.ID == id {
@@ -182,11 +183,11 @@ func resolveLibrary(id, encoder string) (encoderLib, bool) {
 		}
 	}
 	for _, l := range librariesForCodec(codec) {
-		if l.engine == "software" {
+		if l.Engine == "software" {
 			return l, true
 		}
 	}
-	return encoderLib{}, false
+	return EncoderLib{}, false
 }
 
 // ---- availability of the encoders in the local ffmpeg build ----
@@ -196,10 +197,10 @@ func resolveLibrary(id, encoder string) (encoderLib, bool) {
 // request is served, and only read afterwards.
 var ffmpegVideoEncoders map[string]bool
 
-func probeEncoders(bin string) {
+func ProbeEncoders(bin string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, "-hide_banner", "-encoders").Output()
+	out, err := proc.Exec(ctx, bin, "-hide_banner", "-encoders").Output()
 	if err != nil {
 		return
 	}
@@ -239,17 +240,17 @@ func fileExists(p string) bool {
 
 // missingFromFFmpeg reports whether the local ffmpeg build simply has no such
 // encoder, as opposed to the machine lacking the hardware to run it.
-func missingFromFFmpeg(l encoderLib) bool {
+func MissingFromFFmpeg(l EncoderLib) bool {
 	return ffmpegVideoEncoders != nil && !ffmpegVideoEncoders[l.FFmpeg]
 }
 
 // unavailableReason explains why a library cannot be used here, or returns ""
 // when it can. The text is shown next to the disabled entry in the UI.
-func unavailableReason(l encoderLib) string {
-	if missingFromFFmpeg(l) {
+func UnavailableReason(l EncoderLib) string {
+	if MissingFromFFmpeg(l) {
 		return fmt.Sprintf("this ffmpeg build has no %s encoder", l.FFmpeg)
 	}
-	switch l.engine {
+	switch l.Engine {
 	case "nvenc":
 		if runtime.GOOS == "linux" && !fileExists("/dev/nvidiactl") && !fileExists("/dev/nvidia0") {
 			return "no NVIDIA device found"
@@ -274,12 +275,12 @@ func unavailableReason(l encoderLib) string {
 	return ""
 }
 
-// encoderCatalog is the catalog as sent to the browser, with availability
+// EncoderCatalog is the catalog as sent to the browser, with availability
 // filled in for this machine.
-func encoderCatalog() []encoderLib {
-	out := make([]encoderLib, 0, len(encoderLibs))
-	for _, l := range encoderLibs {
-		if reason := unavailableReason(l); reason != "" {
+func EncoderCatalog() []EncoderLib {
+	out := make([]EncoderLib, 0, len(Libs))
+	for _, l := range Libs {
+		if reason := UnavailableReason(l); reason != "" {
 			l.Available = false
 			l.Unavailable = reason
 		} else {
@@ -288,11 +289,4 @@ func encoderCatalog() []encoderLib {
 		out = append(out, l)
 	}
 	return out
-}
-
-func (s *server) handleEncoders(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"kinds":     encoderKinds,
-		"libraries": encoderCatalog(),
-	})
 }

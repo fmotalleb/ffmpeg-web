@@ -1,4 +1,6 @@
-package main
+// Package probe turns ffprobe's output into the trimmed view of a media file
+// the rest of the server works with.
+package probe
 
 import (
 	"context"
@@ -10,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fmotalleb/ffmpeg-web/proc"
 )
 
 // MediaInfo is the trimmed-down view of ffprobe output that the UI needs.
@@ -71,11 +75,13 @@ type probeOutput struct {
 	} `json:"streams"`
 }
 
-func probe(ctx context.Context, ffprobeBin, path string) (*MediaInfo, error) {
+// Probe runs ffprobe over path and returns the parts of its report the UI and
+// the encoder care about.
+func Probe(ctx context.Context, ffprobeBin, path string) (*MediaInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := execCMD(ctx, ffprobeBin,
+	cmd := proc.Exec(ctx, ffprobeBin,
 		"-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", path)
 	out, err := cmd.Output()
@@ -177,12 +183,12 @@ func parseRate(candidates ...string) float64 {
 	return 0
 }
 
-// probeRaw returns ffprobe's full report, for the "show me everything" view.
-func probeRaw(ctx context.Context, ffprobeBin, path string) ([]byte, error) {
+// Raw returns ffprobe's full report, for the "show me everything" view.
+func Raw(ctx context.Context, ffprobeBin, path string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := execCMD(ctx, ffprobeBin,
+	cmd := proc.Exec(ctx, ffprobeBin,
 		"-v", "error", "-print_format", "json",
 		"-show_format", "-show_streams", "-show_chapters", "-show_programs", path)
 	out, err := cmd.Output()

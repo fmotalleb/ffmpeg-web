@@ -1,206 +1,10 @@
 import { create } from "zustand";
-import type {
-  EncoderCatalog,
-  Hook,
-  Job,
-  MediaInfo,
-  Preset,
-  QueueSettings,
-  Spec,
-} from "./types";
-import { codecForEncoder } from "./utils";
+import type { Job, Spec } from "../types";
+import { codecForEncoder } from "../utils";
+import { defaultQueueSettings, defaultSettings, normalizeSpec } from "./defaults";
+import type { AppState } from "./appState";
 
-function defaultSettings(): Spec {
-  return {
-    input: "",
-    outputName: "",
-    container: "mp4",
-    webOptimize: true,
-    moveInPlace: false,
-    logLevel: "error",
-    video: {
-      encoder: "x264",
-      library: "sw",
-      rateMode: "quality",
-      quality: 22,
-      bitrate: 4000,
-      twoPass: false,
-      speed: "medium",
-      profile: "auto",
-      level: "auto",
-      tune: "none",
-      // "off" leaves the frame rate exactly as the source has it.
-      fpsMode: "off",
-      fps: "30",
-      gop: 0,
-    },
-    audio: {
-      encoder: "aac",
-      track: 0,
-      tracks: [0],
-      extra: [],
-      bitrate: 160,
-      mixdown: "stereo",
-      sampleRate: 48000,
-      gain: 0,
-      normalize: false,
-    },
-    picture: {
-      scaleMode: "source",
-      width: 1920,
-      height: 1080,
-      keepAspect: true,
-      pad: false,
-      cropTop: 0,
-      cropBottom: 0,
-      cropLeft: 0,
-      cropRight: 0,
-      cropDetect: false,
-      pixelFormat: "",
-    },
-    filters: {
-      deinterlace: "off",
-      denoise: "off",
-      deband: "off",
-      blur: "off",
-      sharpen: false,
-      deblock: false,
-      tonemap: false,
-      color: { brightness: 0, contrast: 0, saturation: 0, gamma: 0, hue: 0 },
-      rotate: 0,
-      flipH: false,
-      grayscale: false,
-    },
-    subtitle: { mode: "copy", track: 0, tracks: [0], extra: [] },
-    trim: { enabled: false, start: 0, end: 0 },
-    extra: { encoderOptions: "", inputArgs: "", outputArgs: "" },
-  };
-}
-
-// A preset saved by an older build can be missing the fields added since, so
-// fill them in from the defaults rather than letting `undefined` reach a panel.
-function normalizeSpec(spec: Spec): Spec {
-  const base = defaultSettings();
-  return {
-    ...base,
-    ...spec,
-    video: { ...base.video, ...spec.video },
-    audio: {
-      ...base.audio,
-      ...spec.audio,
-      tracks: spec.audio?.tracks ?? base.audio.tracks,
-      extra: spec.audio?.extra ?? [],
-    },
-    picture: { ...base.picture, ...spec.picture },
-    filters: {
-      ...base.filters,
-      ...spec.filters,
-      color: { ...base.filters.color, ...spec.filters?.color },
-    },
-    subtitle: {
-      ...base.subtitle,
-      ...spec.subtitle,
-      tracks: spec.subtitle?.tracks ?? base.subtitle.tracks,
-      extra: spec.subtitle?.extra ?? [],
-    },
-    trim: { ...base.trim, ...spec.trim },
-    extra: { ...base.extra, ...spec.extra },
-  };
-}
-
-function defaultQueueSettings(): QueueSettings {
-  return {
-    verifyOutput: true,
-    autoDeleteSource: false,
-    shrinkThreshold: 20,
-    postQueue: { type: "none", command: "", url: "" } as Hook,
-  };
-}
-
-export interface AppState {
-  config: { root: string; outDir: string; allowCommands: boolean };
-  source: MediaInfo | null;
-  presets: Preset[];
-  presetId: string | null;
-  settings: Spec;
-  queue: { paused: boolean; settings: QueueSettings };
-  jobs: Map<string, Job>;
-  editingJobId: string | null;
-  previewJobId: string | null;
-  activeTab: string;
-  previewTime: number;
-  previewDur: number;
-  previewFrames: {
-    time: number;
-    sourceURL: string | null;
-    targetURL: string | null;
-    targetIsFinal: boolean;
-  };
-  diff: {
-    overlayIsTarget: boolean;
-    magnifier: boolean;
-    magnifierShowsTarget: boolean;
-    dividerPct: number;
-    mode: "split" | "side-by-side" | "overlay" | "difference" | "flicker";
-    opacity: number;
-    magZoom: number;
-    playing: boolean;
-    syncOffset: number;
-  };
-  thumbSourceMode: "source" | "target";
-  contactSheetBlob: Blob | null;
-  browserDir: string | null;
-  browserOpen: boolean;
-  browserKind: "video" | "audio" | "subtitle";
-  browserTarget: "source" | "audio" | "subtitle";
-  batchDir: string | null;
-  batchOpen: boolean;
-  probeOpen: boolean;
-  probeTitle: string;
-  probeUrl: string;
-  logViewPid: number | null;
-  logViewTitle: string;
-  railCollapsed: boolean;
-  queueSettingsOpen: boolean;
-  queueCollapsed: boolean;
-  encoders: EncoderCatalog;
-
-  setSource: (info: MediaInfo) => void;
-  setSettings: (s: Partial<Spec>) => void;
-  updateSettings: (path: string, value: unknown) => void;
-  setActiveTab: (tab: string) => void;
-  setEditingJobId: (id: string | null) => void;
-  setPreviewJobId: (id: string | null) => void;
-  setPresets: (p: Preset[]) => void;
-  setPresetId: (id: string | null) => void;
-  applyPreset: (p: Preset) => void;
-  setConfig: (cfg: { root: string; outDir: string; allowCommands: boolean }) => void;
-  setQueuePaused: (paused: boolean) => void;
-  setQueueSettings: (s: QueueSettings) => void;
-  setJobs: (jobs: Job[]) => void;
-  updateJob: (job: Job) => void;
-  removeJob: (id: string) => void;
-  reorderJobs: (order: string[]) => void;
-  setPreviewTime: (t: number) => void;
-  setPreviewDur: (d: number) => void;
-  setPreviewFrames: (f: AppState["previewFrames"]) => void;
-  setDiffMode: (m: AppState["diff"]["mode"]) => void;
-  setDiffPlaying: (p: boolean) => void;
-  setThumbSourceMode: (m: "source" | "target") => void;
-  setContactSheetBlob: (b: Blob | null) => void;
-  setBrowserOpen: (open: boolean) => void;
-  openBrowser: (kind: "video" | "audio" | "subtitle", target: "source" | "audio" | "subtitle") => void;
-  setBrowserDir: (dir: string | null) => void;
-  setBatchOpen: (open: boolean) => void;
-  setBatchDir: (dir: string | null) => void;
-  setProbe: (open: boolean, title?: string, url?: string) => void;
-  setLogView: (pid: number | null, title?: string) => void;
-  setRailCollapsed: (c: boolean) => void;
-  setQueueSettingsOpen: (o: boolean) => void;
-  setQueueCollapsed: (c: boolean) => void;
-  setEncoders: (c: EncoderCatalog) => void;
-  fitToSource: () => void;
-}
+export type { AppState } from "./appState";
 
 const previewReset = { previewFrames: { time: 0, sourceURL: null, targetURL: null, targetIsFinal: false } };
 
@@ -212,6 +16,7 @@ export const useStore = create<AppState>((set, _get) => ({
   settings: defaultSettings(),
   queue: { paused: false, settings: defaultQueueSettings() },
   jobs: new Map(),
+  jobsLoaded: false,
   editingJobId: null,
   previewJobId: null,
   activeTab: "summary",
@@ -242,18 +47,21 @@ export const useStore = create<AppState>((set, _get) => ({
   probeUrl: "",
   logViewPid: null,
   logViewTitle: "",
+  processViewPid: null,
   railCollapsed: false,
   queueSettingsOpen: false,
-  queueCollapsed: false,
+  // The queue is a drawer, not the main view: it starts closed and opens
+  // itself when something is queued (see setJobs/updateJob).
+  queueCollapsed: true,
   encoders: { kinds: [], libraries: [] },
 
   setSource: (info) =>
     set((s) => {
       const settings = structuredClone(s.settings);
       settings.input = info.path;
-      if (!settings.outputName) {
-        settings.outputName = info.name.replace(/\.[^.]+$/, "");
-      }
+      // A new file gets a new name: the "save as" box follows the file being
+      // worked on, instead of keeping whatever was typed for the last one.
+      settings.outputName = info.name.replace(/\.[^.]+$/, "");
       // A different file means different timings: the trim range goes back to
       // the whole clip and the preview timeline starts over, so neither keeps
       // pointing at a moment the new file may not even have.
@@ -342,16 +150,23 @@ export const useStore = create<AppState>((set, _get) => ({
     set((s) => ({ queue: { ...s.queue, settings } })),
 
   setJobs: (jobs) =>
-    set(() => {
+    set((s) => {
       const map = new Map<string, Job>();
       jobs.forEach((j) => map.set(j.id, j));
-      return { jobs: map };
+      // Newly queued work is the queue's cue to show itself: a job that was not
+      // here a moment ago and is waiting to run opens the closed list.
+      const queued = s.jobsLoaded && jobs.some((j) => j.status === "queued" && !s.jobs.has(j.id));
+      return { jobs: map, jobsLoaded: true, queueCollapsed: queued ? false : s.queueCollapsed };
     }),
 
   updateJob: (job) =>
     set((s) => {
       const jobs = new Map(s.jobs);
+      const isNew = !jobs.has(job.id);
       jobs.set(job.id, job);
+      if (isNew && job.status === "queued") {
+        return { jobs, queueCollapsed: false };
+      }
       return { jobs };
     }),
 
@@ -394,6 +209,7 @@ export const useStore = create<AppState>((set, _get) => ({
     set({ probeOpen: open, probeTitle: title, probeUrl: url }),
   setLogView: (pid, title = "") =>
     set({ logViewPid: pid, logViewTitle: title }),
+  setProcessViewPid: (pid) => set({ processViewPid: pid }),
   setRailCollapsed: (c) => set({ railCollapsed: c }),
   setQueueSettingsOpen: (o) => set({ queueSettingsOpen: o }),
   setQueueCollapsed: (c) => set({ queueCollapsed: c }),

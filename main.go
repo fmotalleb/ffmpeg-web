@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"fmt"
 	"net"
@@ -18,7 +19,16 @@ import (
 	"github.com/fmotalleb/go-tools/log"
 	"github.com/fmotalleb/varg"
 	"go.uber.org/zap"
+
+	"github.com/fmotalleb/ffmpeg-web/ffmpeg"
+	"github.com/fmotalleb/ffmpeg-web/jobs"
+	"github.com/fmotalleb/ffmpeg-web/server"
+	"github.com/fmotalleb/ffmpeg-web/storage"
+	"github.com/fmotalleb/ffmpeg-web/system"
 )
+
+//go:embed web-dist
+var webAssets embed.FS
 
 func main() {
 	logger := log.
@@ -95,53 +105,54 @@ survives a crash, output verification, and post-encode actions.
 		}
 	}
 
-	probeEncoders(ffmpegBin)
+	ffmpeg.ProbeEncoders(ffmpegBin)
 
 	queuePath := queueFile
 	if queuePath == "" {
 		queuePath = filepath.Join(outDir, "queue.json")
 	}
-	store := NewStore(queuePath, logger.Named("store"))
+	store := storage.NewStore(queuePath, logger.Named("store"))
 	snap, err := store.Load()
 	must(err)
 
-	broker := NewBroker()
-	hooks := &hookRunner{log: logger.Named("hooks"), allowCommands: allowCmds, outDir: outDir}
-	manager := NewManager(ffmpegBin, ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
+	broker := jobs.NewBroker()
+	hooks := jobs.NewHookRunner(logger.Named("hooks"), allowCmds, outDir)
+	manager := jobs.NewManager(ffmpegBin, ffprobeBin, workDir, broker, store, hooks, logger.Named("queue"))
 	recovered := manager.Restore(snap)
 	store.Start(manager.Snapshot)
 	manager.Start()
 
-	presetStore := newPresetStore(filepath.Join(outDir, "presets.json"), logger.Named("presets"))
-	presetStore.load()
+	presetStore := storage.NewPresetStore(filepath.Join(outDir, "presets.json"), logger.Named("presets"))
+	presetStore.Load()
 
-	srv := &server{
-		mediaRoot: mediaRoot,
-		outDir:    outDir,
-		uploadDir: uploadDir,
-		workDir:   workDir,
-		ffmpeg:    ffmpegBin,
-		ffprobe:   ffprobeBin,
-		broker:    broker,
-		jobs:      manager,
-		store:     store,
-		presets:   presetStore,
-		frames:    newFrameCache(256 << 20),
-		log:       logger.Named("web"),
-		monitor:   newSystemMonitor(),
-		maxUpload: int64(maxUpload),
-		allowCmds: allowCmds,
+	srv := server.New(server.Config{
+		MediaRoot: mediaRoot,
+		OutDir:    outDir,
+		UploadDir: uploadDir,
+		WorkDir:   workDir,
+		FFmpeg:    ffmpegBin,
+		FFprobe:   ffprobeBin,
+		Jobs:      manager,
+		Broker:    broker,
+		Store:     store,
+		Presets:   presetStore,
+		Frames:    ffmpeg.NewFrameCache(256 << 20),
+		Monitor:   system.NewMonitor(),
+		Assets:    webAssets,
+		Log:       logger.Named("web"),
+		MaxUpload: int64(maxUpload),
+		AllowCmds: allowCmds,
 
-		authUsername: auth[0],
-		authPassword: auth[1],
-	}
+		AuthUser: auth[0],
+		AuthPass: auth[1],
+	})
 
 	httpSrv := &http.Server{
 		Addr:              addr,
-		Handler:           srv.routes(),
+		Handler:           srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 		BaseContext: func(_ net.Listener) context.Context {
-			return log.WithLogger(ctx, srv.log)
+			return log.WithLogger(ctx, logger.Named("web"))
 		},
 	}
 
@@ -165,8 +176,8 @@ survives a crash, output verification, and post-encode actions.
 	<-stop
 	logger.Info("shutting down, saving the queue")
 	// A frozen encode would outlive this server as a stopped process nothing
-	// can wake any more, so let it run on like any other interrupted job.
-	manager.thawFrozen()
+	// can wake up, so let it run on like any other interrupted job.
+	manager.ThawFrozen()
 	store.Flush()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
