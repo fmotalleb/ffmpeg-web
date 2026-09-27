@@ -1,9 +1,10 @@
-package main
+// Package system describes the machine and what ffmpeg is doing to it: the
+// hardware report behind the "Hardware" chip in the top bar.
+package system
 
 import (
 	"bufio"
 	"context"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fmotalleb/ffmpeg-web/ffmpeg"
 )
 
 // The hardware report behind the "Hardware" chip in the top bar. It answers the
@@ -23,16 +26,16 @@ import (
 // simply left out (zero, or -1 for the load averages) on systems that cannot
 // answer — the UI hides what it did not get rather than inventing a number.
 
-type hwDevice struct {
+type HwDevice struct {
 	Kind   string `json:"kind"` // nvidia | intel | amd | apple | gpu
 	Name   string `json:"name"`
 	Path   string `json:"path,omitempty"`
 	Driver string `json:"driver,omitempty"`
 }
 
-// hwEncoderStatus is one hardware family (NVENC, Quick Sync, …) reduced to what
+// HwEncoderStatus is one hardware family (NVENC, Quick Sync, …) reduced to what
 // this machine can actually do with it.
-type hwEncoderStatus struct {
+type HwEncoderStatus struct {
 	Engine    string   `json:"engine"`
 	Label     string   `json:"label"`
 	Vendor    string   `json:"vendor"`
@@ -42,16 +45,16 @@ type hwEncoderStatus struct {
 	Missing   []string `json:"missing,omitempty"` // ffmpeg encoders this build lacks
 }
 
-// encodeLoad is what the queue is asking of the machine while the report is
+// EncodeLoad is what the queue is asking of the machine while the report is
 // taken.
-type encodeLoad struct {
+type EncodeLoad struct {
 	Jobs int     `json:"jobs"`
 	FPS  float64 `json:"fps"`
 }
 
-// ffmpegProcess is one live ffmpeg/ffprobe process, measured the way top does
+// FFmpegProcess is one live ffmpeg/ffprobe process, measured the way top does
 // it: two samples of its /proc counters, a moment apart.
-type ffmpegProcess struct {
+type FFmpegProcess struct {
 	PID     int     `json:"pid"`
 	Kind    string  `json:"kind"`            // ffmpeg | ffprobe
 	JobID   string  `json:"jobId,omitempty"` // the queued job that owns it, when known
@@ -61,17 +64,18 @@ type ffmpegProcess struct {
 	Threads int     `json:"threads"`
 }
 
-// ffmpegUsage is how much of the machine ffmpeg is holding right now.
-type ffmpegUsage struct {
+// FFmpegUsage is how much of the machine ffmpeg is holding right now.
+type FFmpegUsage struct {
 	Running   bool            `json:"running"`
 	Sampled   bool            `json:"sampled"`   // false until a second sample exists
 	CPU       float64         `json:"cpu"`       // percent of a single core, all processes
 	CPUofHost float64         `json:"cpuOfHost"` // percent of the whole machine
 	RSS       uint64          `json:"rss"`       // bytes of resident memory
-	Processes []ffmpegProcess `json:"processes"`
+	Processes []FFmpegProcess `json:"processes"`
 }
 
-type systemStatus struct {
+// Status is the whole report, ready to be sent to the browser.
+type Status struct {
 	Hostname      string            `json:"hostname"`
 	OS            string            `json:"os"`
 	Arch          string            `json:"arch"`
@@ -83,10 +87,10 @@ type systemStatus struct {
 	MemTotal      uint64            `json:"memTotal"`
 	MemUsed       uint64            `json:"memUsed"`
 	MemPercent    float64           `json:"memPercent"`
-	Devices       []hwDevice        `json:"devices"`
-	Encoders      []hwEncoderStatus `json:"encoders"`
-	Encoding      encodeLoad        `json:"encoding"`
-	FFmpeg        ffmpegUsage       `json:"ffmpegUsage"`
+	Devices       []HwDevice        `json:"devices"`
+	Encoders      []HwEncoderStatus `json:"encoders"`
+	Encoding      EncodeLoad        `json:"encoding"`
+	FFmpeg        FFmpegUsage       `json:"ffmpegUsage"`
 	FFmpegVersion string            `json:"ffmpegVersion,omitempty"`
 }
 
@@ -106,8 +110,10 @@ var codecLabels = map[string]string{
 	"vp9":  "VP9",
 }
 
-func (s *server) handleSystem(w http.ResponseWriter, r *http.Request) {
-	status := systemStatus{
+// Collect assembles the whole report: the machine's fixed facts, the encoders
+// it can offer, and what ffmpeg is doing right now.
+func Collect(ffmpegBin string, monitor *Monitor, jobPIDs map[string]int, encoding EncodeLoad) Status {
+	status := Status{
 		Hostname:      hostname(),
 		OS:            runtime.GOOS,
 		Arch:          runtime.GOARCH,
@@ -118,55 +124,41 @@ func (s *server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		Load15:        -1,
 		Devices:       gpuDevices(),
 		Encoders:      hardwareEncoders(),
-		Encoding:      s.encodeLoad(),
-		FFmpeg:        s.monitor.usage(s.jobs.ffmpegPIDs()),
-		FFmpegVersion: ffmpegVersion(s.ffmpeg),
+		Encoding:      encoding,
+		FFmpeg:        monitor.usage(jobPIDs),
+		FFmpegVersion: ffmpegVersion(ffmpegBin),
 	}
 	status.Load1, status.Load5, status.Load15 = loadAverage()
 	status.MemTotal, status.MemUsed = memoryUsage()
 	if status.MemTotal > 0 {
 		status.MemPercent = float64(status.MemUsed) / float64(status.MemTotal) * 100
 	}
-	writeJSON(w, http.StatusOK, status)
-}
-
-// encodeLoad sums up the running jobs, so the popover can show the machine
-// being used rather than only its theoretical abilities.
-func (s *server) encodeLoad() encodeLoad {
-	var load encodeLoad
-	for _, job := range s.jobs.Snapshot().Jobs {
-		if job.Status != StatusRunning {
-			continue
-		}
-		load.Jobs++
-		load.FPS += job.FPS
-	}
-	return load
+	return status
 }
 
 // hardwareEncoders groups the catalog's GPU libraries by family and works out
 // which of their codecs this machine can use, and which encoders the local
 // ffmpeg build simply does not have.
-func hardwareEncoders() []hwEncoderStatus {
+func hardwareEncoders() []HwEncoderStatus {
 	index := map[string]int{}
-	out := []hwEncoderStatus{}
-	for _, l := range encoderLibs {
+	out := []HwEncoderStatus{}
+	for _, l := range ffmpeg.Libs {
 		if l.Kind != "gpu" {
 			continue
 		}
-		i, ok := index[l.engine]
+		i, ok := index[l.Engine]
 		if !ok {
 			i = len(out)
-			index[l.engine] = i
-			out = append(out, hwEncoderStatus{
-				Engine: l.engine,
-				Label:  hwEngineLabels[l.engine],
+			index[l.Engine] = i
+			out = append(out, HwEncoderStatus{
+				Engine: l.Engine,
+				Label:  hwEngineLabels[l.Engine],
 				Vendor: l.Vendor,
 				Codecs: []string{},
 			})
 		}
 		group := &out[i]
-		reason := unavailableReason(l)
+		reason := ffmpeg.UnavailableReason(l)
 		if reason == "" {
 			group.Available = true
 			group.Codecs = append(group.Codecs, codecLabels[l.Codec])
@@ -177,7 +169,7 @@ func hardwareEncoders() []hwEncoderStatus {
 		}
 		// "missing" is about the ffmpeg build only: a machine with no NVIDIA
 		// card still has the encoders, it just cannot use them.
-		if missingFromFFmpeg(l) {
+		if ffmpeg.MissingFromFFmpeg(l) {
 			group.Missing = append(group.Missing, l.FFmpeg)
 		}
 	}
@@ -300,20 +292,20 @@ func sysctl(key string) string {
 
 // ---- graphics devices ----
 
-func gpuDevices() []hwDevice {
+func gpuDevices() []HwDevice {
 	switch runtime.GOOS {
 	case "linux":
 		return linuxGPUDevices()
 	case "darwin":
-		return []hwDevice{{Kind: "apple", Name: "Apple VideoToolbox (built in)"}}
+		return []HwDevice{{Kind: "apple", Name: "Apple VideoToolbox (built in)"}}
 	}
-	return []hwDevice{}
+	return []HwDevice{}
 }
 
-func linuxGPUDevices() []hwDevice {
-	devices := []hwDevice{}
+func linuxGPUDevices() []HwDevice {
+	devices := []HwDevice{}
 	if fileExists("/dev/nvidiactl") || fileExists("/dev/nvidia0") {
-		devices = append(devices, hwDevice{
+		devices = append(devices, HwDevice{
 			Kind: "nvidia", Name: "NVIDIA GPU", Path: "/dev/nvidia0", Driver: nvidiaDriver(),
 		})
 	}
@@ -327,7 +319,7 @@ func linuxGPUDevices() []hwDevice {
 // drmDevice describes one render node. The name comes from sysfs — the PCI
 // vendor plus the kernel driver — because "/dev/dri/renderD128" says nothing
 // about which card it is.
-func drmDevice(node string) hwDevice {
+func drmDevice(node string) HwDevice {
 	base := filepath.Base(node)
 	class := "/sys/class/drm/" + base
 	vendor := strings.TrimSpace(readFileString(filepath.Join(class, "device", "vendor")))
@@ -351,7 +343,7 @@ func drmDevice(node string) hwDevice {
 	if driver != "" {
 		label += " (" + driver + ")"
 	}
-	return hwDevice{Kind: kind, Name: label, Path: node, Driver: driver}
+	return HwDevice{Kind: kind, Name: label, Path: node, Driver: driver}
 }
 
 func nvidiaDriver() string {
@@ -371,6 +363,11 @@ func readFileString(path string) string {
 	return string(data)
 }
 
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 // ---- what ffmpeg is using right now ----
 
 // ticksPerSecond is the unit of the utime/stime fields in /proc/<pid>/stat.
@@ -380,14 +377,15 @@ const ticksPerSecond = 100
 
 // systemMonitor remembers the previous sample of the ffmpeg processes so the
 // next one can turn their CPU counters into a rate.
-type systemMonitor struct {
+type Monitor struct {
 	mu   sync.Mutex
 	at   time.Time
 	prev map[int]ffmpegSample
 }
 
-func newSystemMonitor() *systemMonitor {
-	return &systemMonitor{prev: map[int]ffmpegSample{}}
+// NewMonitor creates the sampler that turns the previous reading into a rate.
+func NewMonitor() *Monitor {
+	return &Monitor{prev: map[int]ffmpegSample{}}
 }
 
 type ffmpegSample struct {
@@ -400,7 +398,7 @@ type ffmpegSample struct {
 // usage reports what ffmpeg is doing, and which queued job each of those
 // processes belongs to. The job PIDs come from the queue rather than from
 // matching process names, so a job row always describes its own encode.
-func (m *systemMonitor) usage(jobPIDs map[string]int) ffmpegUsage {
+func (m *Monitor) usage(jobPIDs map[string]int) FFmpegUsage {
 	samples := readFFmpegProcesses(jobPIDs)
 	now := time.Now()
 
@@ -415,7 +413,7 @@ func (m *systemMonitor) usage(jobPIDs map[string]int) ffmpegUsage {
 	}
 
 	elapsed := now.Sub(since).Seconds()
-	usage := ffmpegUsage{Processes: []ffmpegProcess{}}
+	usage := FFmpegUsage{Processes: []FFmpegProcess{}}
 	pids := make([]int, 0, len(samples))
 	for pid := range samples {
 		pids = append(pids, pid)
@@ -424,7 +422,7 @@ func (m *systemMonitor) usage(jobPIDs map[string]int) ffmpegUsage {
 
 	for _, pid := range pids {
 		sample := samples[pid]
-		proc := ffmpegProcess{
+		proc := FFmpegProcess{
 			PID: pid, Kind: sample.kind, JobID: owner[pid],
 			RSS: sample.rss, Threads: sample.threads,
 		}

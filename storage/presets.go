@@ -1,4 +1,4 @@
-package main
+package storage
 
 import (
 	"encoding/json"
@@ -12,71 +12,73 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/fmotalleb/ffmpeg-web/ffmpeg"
 )
 
 // Preset is a named starting point. The UI merges it into the current settings;
 // the user can then change anything before queueing. Owned presets were saved
 // by the user and can be replaced or deleted; built-ins in the code never are.
 type Preset struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Group    string `json:"group"`
-	Note     string `json:"note"`
-	Owned    bool   `json:"owned"`
-	Settings Spec   `json:"settings"`
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Group    string      `json:"group"`
+	Note     string      `json:"note"`
+	Owned    bool        `json:"owned"`
+	Settings ffmpeg.Spec `json:"settings"`
 }
 
-func base(container string) Spec {
-	return Spec{
+func base(container string) ffmpeg.Spec {
+	return ffmpeg.Spec{
 		Container:   container,
 		WebOptimize: container == "mp4",
-		Video: VideoSpec{
+		Video: ffmpeg.VideoSpec{
 			Encoder: "x264", RateMode: "quality", Quality: 22, Speed: "medium",
 			Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
 		},
-		Audio: AudioSpec{
+		Audio: ffmpeg.AudioSpec{
 			Encoder: "aac", Bitrate: 160, Mixdown: "stereo", SampleRate: 48000,
 		},
-		Picture: PictureSpec{ScaleMode: "source", KeepAspect: true},
-		Filters: FilterSpec{Deinterlace: "off", Denoise: "off"},
+		Picture: ffmpeg.PictureSpec{ScaleMode: "source", KeepAspect: true},
+		Filters: ffmpeg.FilterSpec{Deinterlace: "off", Denoise: "off"},
 		// Keeping the subtitles is the default: nothing is dropped unless the
 		// user asks for it, so every preset starts from "copy".
-		Subtitle: SubtitleSpec{Mode: "copy"},
+		Subtitle: ffmpeg.SubtitleSpec{Mode: "copy"},
 	}
 }
 
-func withVideo(s Spec, fn func(*VideoSpec)) Spec { fn(&s.Video); return s }
+func withVideo(s ffmpeg.Spec, fn func(*ffmpeg.VideoSpec)) ffmpeg.Spec { fn(&s.Video); return s }
 
 var presets = buildPresets()
 
 func buildPresets() []Preset {
 	general1080 := base("mp4")
-	general1080.Picture = PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
+	general1080.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
 	general1080.Video.Quality = 22
 	general1080.Video.FPSMode = "peak"
 	general1080.Video.FPS = "30"
 
 	general720 := general1080
-	general720.Picture = PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
+	general720.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
 	general720.Video.Quality = 23
 	general720.Audio.Bitrate = 128
 
 	fast480 := base("mp4")
-	fast480.Picture = PictureSpec{ScaleMode: "custom", Width: 854, Height: 480, KeepAspect: true}
+	fast480.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 854, Height: 480, KeepAspect: true}
 	fast480.Video.Quality = 25
 	fast480.Video.Speed = "veryfast"
 	fast480.Audio.Bitrate = 96
 
 	hevc1080 := base("mkv")
-	hevc1080.Video = VideoSpec{
+	hevc1080.Video = ffmpeg.VideoSpec{
 		Encoder: "x265", RateMode: "quality", Quality: 26, Speed: "medium",
 		Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
 	}
-	hevc1080.Picture = PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080,
+	hevc1080.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080,
 		KeepAspect: true, PixelFormat: "yuv420p10le"}
 
 	hevc4k := hevc1080
-	hevc4k.Picture = PictureSpec{ScaleMode: "custom", Width: 3840, Height: 2160,
+	hevc4k.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 3840, Height: 2160,
 		KeepAspect: true, PixelFormat: "yuv420p10le"}
 	hevc4k.Video.Quality = 24
 	hevc4k.Video.Speed = "slow"
@@ -85,26 +87,26 @@ func buildPresets() []Preset {
 
 	av1web := base("mkv")
 	av1web.WebOptimize = true
-	av1web.Video = VideoSpec{
+	av1web.Video = ffmpeg.VideoSpec{
 		Encoder: "av1", RateMode: "quality", Quality: 32, Speed: "fast",
 		Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
 	}
 	av1web.Audio.Encoder = "opus"
 	av1web.Audio.Bitrate = 128
-	av1web.Picture = PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
+	av1web.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
 
 	vp9web := base("mkv")
 	vp9web.WebOptimize = true
-	vp9web.Video = VideoSpec{
+	vp9web.Video = ffmpeg.VideoSpec{
 		Encoder: "vp9", RateMode: "quality", Quality: 31, Speed: "medium",
 		Profile: "auto", Level: "auto", Tune: "none", FPSMode: "same",
 	}
 	vp9web.Audio.Encoder = "opus"
 	vp9web.Audio.Bitrate = 128
-	vp9web.Picture = PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
+	vp9web.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
 
 	phone := base("mp4")
-	phone.Picture = PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
+	phone.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1280, Height: 720, KeepAspect: true}
 	phone.Video.Quality = 24
 	phone.Video.Profile = "main"
 	phone.Video.Level = "4.0"
@@ -112,7 +114,7 @@ func buildPresets() []Preset {
 	phone.Audio.Bitrate = 128
 
 	social := base("mp4")
-	social.Picture = PictureSpec{ScaleMode: "custom", Width: 1080, Height: 1920,
+	social.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1080, Height: 1920,
 		KeepAspect: true, Pad: true}
 	social.Video.Quality = 21
 	social.Video.FPSMode = "constant"
@@ -120,7 +122,7 @@ func buildPresets() []Preset {
 	social.Audio.Bitrate = 128
 
 	archive := base("mkv")
-	archive.Video = withVideo(archive, func(v *VideoSpec) {
+	archive.Video = withVideo(archive, func(v *ffmpeg.VideoSpec) {
 		v.Encoder = "x265"
 		v.Quality = 20
 		v.Speed = "slow"
@@ -131,7 +133,7 @@ func buildPresets() []Preset {
 	remux := base("mkv")
 	remux.Video.Encoder = "copy"
 	remux.Audio.Encoder = "copy"
-	remux.Subtitle = SubtitleSpec{Mode: "copy"}
+	remux.Subtitle = ffmpeg.SubtitleSpec{Mode: "copy"}
 
 	return []Preset{
 		{ID: "general-1080p30", Name: "1080p30", Group: "General",
@@ -168,23 +170,24 @@ func builtinPresetByName(name string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// presetStore keeps the presets the user saves. Built-ins stay in code; user
+// PresetStore keeps the presets the user saves. Built-ins stay in code; user
 // presets live in one JSON file next to the queue and are keyed by name —
 // saving a preset with a name that already exists replaces it in place.
-type presetStore struct {
+type PresetStore struct {
 	path string
 	log  *zap.Logger
 	mu   sync.Mutex
 	user []Preset
 }
 
-func newPresetStore(path string, log *zap.Logger) *presetStore {
-	return &presetStore{path: path, log: log}
+// NewPresetStore creates a store backed by one JSON file.
+func NewPresetStore(path string, log *zap.Logger) *PresetStore {
+	return &PresetStore{path: path, log: log}
 }
 
 // list returns the user's own presets first: they saved them for the files
 // they are working on right now, so they belong above the built-ins.
-func (s *presetStore) list() []Preset {
+func (s *PresetStore) List() []Preset {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]Preset, 0, len(presets)+len(s.user))
@@ -195,7 +198,7 @@ func (s *presetStore) list() []Preset {
 
 // save creates a preset, or replaces the user preset with the same name. The
 // name is the identity, so a repeat save never duplicates.
-func (s *presetStore) save(name, group, note string, settings Spec) (Preset, error) {
+func (s *PresetStore) Save(name, group, note string, settings ffmpeg.Spec) (Preset, error) {
 	name = strings.TrimSpace(name)
 	switch {
 	case name == "":
@@ -213,8 +216,8 @@ func (s *presetStore) save(name, group, note string, settings Spec) (Preset, err
 	// points at a particular source or output so applying it always starts clean.
 	settings.Input = ""
 	settings.OutputName = ""
-	settings.Trim = TrimSpec{}
-	settings.Audio = AudioSpec{
+	settings.Trim = ffmpeg.TrimSpec{}
+	settings.Audio = ffmpeg.AudioSpec{
 		Encoder: settings.Audio.Encoder, Bitrate: settings.Audio.Bitrate,
 		Mixdown: settings.Audio.Mixdown, SampleRate: settings.Audio.SampleRate,
 		Gain: settings.Audio.Gain, Normalize: settings.Audio.Normalize,
@@ -250,7 +253,7 @@ func (s *presetStore) save(name, group, note string, settings Spec) (Preset, err
 	return p, nil
 }
 
-func (s *presetStore) delete(name string) error {
+func (s *PresetStore) Delete(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return errors.New("empty preset name")
@@ -266,7 +269,8 @@ func (s *presetStore) delete(name string) error {
 	return fmt.Errorf("no preset named %q", name)
 }
 
-func (s *presetStore) load() {
+// Load reads user presets from disk, moving a corrupt file aside.
+func (s *PresetStore) Load() {
 	body, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
 		return
@@ -286,7 +290,7 @@ func (s *presetStore) load() {
 	}
 }
 
-func (s *presetStore) write() error {
+func (s *PresetStore) write() error {
 	body, err := json.MarshalIndent(s.user, "", "  ")
 	if err != nil {
 		return err

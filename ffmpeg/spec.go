@@ -1,10 +1,15 @@
-package main
+// Package ffmpeg turns a Spec into an ffmpeg command line and does the small
+// jobs around encoding: single-frame extraction, preview clips, output checks,
+// and the catalog of encoder libraries this build can offer.
+package ffmpeg
 
 import (
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
+
+	"github.com/fmotalleb/ffmpeg-web/proc"
 )
 
 // Spec is the full description of one encode, as sent by the UI.
@@ -130,9 +135,9 @@ var videoEncoders = map[string]string{
 
 // resolveVideoEncoder turns the codec + library pair chosen in the UI into the
 // ffmpeg encoder name, together with the library describing how to drive it.
-func resolveVideoEncoder(v VideoSpec) (string, encoderLib) {
+func resolveVideoEncoder(v VideoSpec) (string, EncoderLib) {
 	if v.Encoder == "copy" {
-		return "copy", encoderLib{}
+		return "copy", EncoderLib{}
 	}
 	lib, ok := resolveLibrary(v.Library, v.Encoder)
 	if !ok {
@@ -140,7 +145,7 @@ func resolveVideoEncoder(v VideoSpec) (string, encoderLib) {
 		lib, _ = resolveLibrary("sw", "x264")
 		return videoEncoders["x264"], lib
 	}
-	if lib.engine == "software" {
+	if lib.Engine == "software" {
 		if enc := videoEncoders[v.Encoder]; enc != "" {
 			return enc, lib
 		}
@@ -149,9 +154,9 @@ func resolveVideoEncoder(v VideoSpec) (string, encoderLib) {
 	return lib.FFmpeg, lib
 }
 
-// twoPassWanted reports whether the spec asks for a two-pass bitrate run and
+// TwoPassWanted reports whether the spec asks for a two-pass bitrate run and
 // the chosen library can actually do one.
-func twoPassWanted(spec Spec) bool {
+func TwoPassWanted(spec Spec) bool {
 	if !spec.Video.TwoPass || spec.Video.RateMode != "bitrate" || spec.Video.Encoder == "copy" {
 		return false
 	}
@@ -455,9 +460,19 @@ func resolveLogLevel(name string) string {
 	return "error"
 }
 
-// buildArgs renders the ffmpeg command line.
+// NormalizeContainer keeps a container name to one the encoder supports,
+// falling back to mp4 for anything unknown.
+func NormalizeContainer(c string) string {
+	switch c {
+	case "mp4", "mkv", "webm":
+		return c
+	}
+	return "mp4"
+}
+
+// BuildArgs renders the ffmpeg command line.
 // pass is 0 for a single-pass encode, or 1/2 for two-pass ABR.
-func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error) {
+func BuildArgs(s Spec, input, output, passLog string, pass int) ([]string, error) {
 	args := []string{"-hide_banner", "-nostdin", "-y",
 		"-loglevel", resolveLogLevel(s.LogLevel),
 		"-progress", "pipe:1", "-nostats"}
@@ -484,7 +499,7 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	if pass > 0 && !lib.SupportsTwoPass {
 		return nil, fmt.Errorf("%s cannot do two-pass encoding — switch two passes off or pick another library", orDefault(lib.Name, "this encoder"))
 	}
-	if lib.engine == "vaapi" {
+	if lib.Engine == "vaapi" {
 		args = append(args, "-vaapi_device", vaapiDevice())
 	}
 
@@ -531,7 +546,7 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	}
 
 	// ---- video ----
-	if vf := filterChain(s, input, lib.engine); vf != "" && enc != "copy" {
+	if vf := filterChain(s, input, lib.Engine); vf != "" && enc != "copy" {
 		args = append(args, "-vf", vf)
 	}
 	args = append(args, "-c:v", enc)
@@ -656,7 +671,7 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 	args = append(args, outputExtra...)
 
 	if pass == 1 {
-		args = append(args, "-f", "null", nullDevice)
+		args = append(args, "-f", "null", proc.NullDevice)
 	} else {
 		args = append(args, output)
 	}
@@ -665,12 +680,12 @@ func buildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 
 // speedArgs maps the shared speed words onto whichever preset scale the chosen
 // library actually understands.
-func speedArgs(v VideoSpec, lib encoderLib, enc string) []string {
+func speedArgs(v VideoSpec, lib EncoderLib, enc string) []string {
 	if !lib.SupportsSpeed {
 		return nil
 	}
 	speed := orDefault(v.Speed, "medium")
-	switch lib.engine {
+	switch lib.Engine {
 	case "software":
 		switch enc {
 		case "libx264", "libx265":
@@ -704,7 +719,7 @@ func amfQuality(speed string) string {
 // qualityArgs renders constant-quality (or constant-quantiser) rate control.
 // Every library spells it differently, and VideoToolbox even counts quality the
 // other way round — the caller's number always means "lower is better".
-func qualityArgs(v VideoSpec, lib encoderLib, enc string) []string {
+func qualityArgs(v VideoSpec, lib EncoderLib, enc string) []string {
 	if lib.Kind == "gpu" {
 		q := int(math.Round(v.Quality))
 		if lib.QualityInverted {
@@ -714,7 +729,7 @@ func qualityArgs(v VideoSpec, lib encoderLib, enc string) []string {
 			q = 0
 		}
 		s := strconv.Itoa(q)
-		switch lib.engine {
+		switch lib.Engine {
 		case "nvenc":
 			// CQ alone: without an explicit bitrate NVENC would otherwise
 			// fall back to its default 2 Mbit/s target.
