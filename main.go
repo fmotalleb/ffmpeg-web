@@ -38,10 +38,12 @@ func main() {
 			"version": git.GetVersion(),
 		}).
 		MustBuild()
+
 	ctx := log.WithLogger(
 		context.Background(),
 		logger,
 	)
+
 	args := varg.New("ffmpeg-web").
 		About(`A single Go binary that serves a browser UI for transcoding video. Presets,
 a settings panel per topic, batch encoding of whole folders, a queue that

@@ -138,6 +138,7 @@ func (s *server) handlePreviewClip(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, err.Error())
 		return
 	}
+	body.Spec.Subtitle = ffmpeg.SubtitleSpec{}
 	dur := body.Duration
 	if dur <= 0 {
 		dur = ffmpeg.DefaultClipDur
