@@ -18,11 +18,16 @@ export function PresetsRail() {
   const [newNote, setNewNote] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // The user's own presets are their working set, so they — and the form that
+  // adds to them — sit above the built-ins.
+  const mine = presets.filter((p) => p.owned);
   const groups = new Map<string, Preset[]>();
-  presets.forEach((p) => {
-    if (!groups.has(p.group)) groups.set(p.group, []);
-    groups.get(p.group)!.push(p);
-  });
+  presets
+    .filter((p) => !p.owned)
+    .forEach((p) => {
+      if (!groups.has(p.group)) groups.set(p.group, []);
+      groups.get(p.group)!.push(p);
+    });
 
   const nameTaken = (name: string) =>
     presets.some((p) => p.name.toLowerCase() === name.trim().toLowerCase());
@@ -72,6 +77,27 @@ export function PresetsRail() {
     }
   }
 
+  const presetRow = (preset: Preset) => (
+    <div className="preset-row" key={preset.id}>
+      <button
+        className={`preset${presetId === preset.id ? " is-active" : ""}`}
+        onClick={() => handleApply(preset)}
+      >
+        <strong>{preset.name}</strong>
+        <span>{preset.note}</span>
+      </button>
+      {preset.owned && (
+        <button
+          className="preset-del"
+          title={`Delete "${preset.name}"`}
+          onClick={() => handleDelete(preset)}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+
   // Collapsed, the rail leaves a handle behind so the presets can always be
   // brought back — the sidebar narrows instead of disappearing.
   if (railCollapsed) {
@@ -108,57 +134,46 @@ export function PresetsRail() {
         </button>
       </div>
       <div className="preset-list">
+        <div>
+          <p className="preset-group-name">My presets</p>
+          <div className="preset-save">
+            <p className="preset-save-title">Save current settings</p>
+            <input
+              type="text"
+              value={newName}
+              placeholder="Preset name"
+              maxLength={60}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            />
+            <input
+              type="text"
+              value={newNote}
+              placeholder="Note (optional)"
+              onChange={(e) => setNewNote(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            />
+            {nameTaken(newName) && (
+              <p className="preset-save-hint">
+                A preset with this name already exists, saving will replace it.
+              </p>
+            )}
+            <button className="btn btn-small" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving\u2026" : "Save preset"}
+            </button>
+          </div>
+          {mine.length === 0 ? (
+            <p className="preset-empty">No saved presets yet.</p>
+          ) : (
+            mine.map(presetRow)
+          )}
+        </div>
         {Array.from(groups.entries()).map(([group, items]) => (
           <div key={group}>
             <p className="preset-group-name">{group}</p>
-            {items.map((preset) => (
-              <div className="preset-row" key={preset.id}>
-                <button
-                  className={`preset${presetId === preset.id ? " is-active" : ""}`}
-                  onClick={() => handleApply(preset)}
-                >
-                  <strong>{preset.name}</strong>
-                  <span>{preset.note}</span>
-                </button>
-                {preset.owned && (
-                  <button
-                    className="preset-del"
-                    title={`Delete "${preset.name}"`}
-                    onClick={() => handleDelete(preset)}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
+            {items.map(presetRow)}
           </div>
         ))}
-      </div>
-      <div className="preset-save">
-        <p className="preset-save-title">Save current settings</p>
-        <input
-          type="text"
-          value={newName}
-          placeholder="Preset name"
-          maxLength={60}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSave()}
-        />
-        <input
-          type="text"
-          value={newNote}
-          placeholder="Note (optional)"
-          onChange={(e) => setNewNote(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSave()}
-        />
-        {nameTaken(newName) && (
-          <p className="preset-save-hint">
-            A preset with this name already exists, saving will replace it.
-          </p>
-        )}
-        <button className="btn btn-small" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving\u2026" : "Save preset"}
-        </button>
       </div>
     </aside>
   );

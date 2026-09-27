@@ -609,6 +609,13 @@ a.btn-star:hover {
   color: var(--amber);
 }
 .preset-save .btn { justify-content: center; }
+.preset-empty {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-dim);
+}
 
 .work {
   display: grid;
