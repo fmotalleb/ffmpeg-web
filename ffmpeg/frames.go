@@ -74,6 +74,9 @@ func EncodePreviewFrame(ctx context.Context, ffmpegBin, path string, atSeconds f
 	width = evenWidth(width)
 	var lastErr error
 	for _, seek := range seekTimes(atSeconds) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		data, err := encodePreviewFrameAt(ctx, ffmpegBin, path, seek, width, spec, workDir)
 		if err == nil && len(data) > 0 {
 			return data, nil
@@ -100,6 +103,7 @@ func encodePreviewFrameAt(ctx context.Context, ffmpegBin, path string, atSeconds
 	seekSpec.Trim.Enabled = true
 	seekSpec.Trim.Start = math.Max(0, atSeconds-0.5)
 	seekSpec.Trim.End = 0 // no duration limit; -frames:v stops the encode
+	seekSpec.Subtitle = SubtitleSpec{Mode: "none"}
 
 	args, err := BuildArgs(seekSpec, path, tmpPath, "", 0)
 	if err != nil {
@@ -146,6 +150,9 @@ func runFrameExtract(ctx context.Context, ffmpegBin, path string, atSeconds floa
 	width = evenWidth(width)
 	var lastErr error
 	for _, seek := range seekTimes(atSeconds) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		data, err := extractFrameAt(ctx, ffmpegBin, path, seek, width, vf)
 		if err == nil && len(data) > 0 {
 			return data, nil
@@ -208,6 +215,9 @@ func ExtractClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSeco
 	width = evenWidth(width)
 	var lastErr error
 	for _, seek := range seekTimes(atSeconds) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		data, err := extractClipAt(ctx, ffmpegBin, ffprobeBin, path, seek, duration, width)
 		if err == nil {
 			return data, nil
@@ -233,7 +243,7 @@ func extractClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string, atSe
 		"-ss", trimFloat(atSeconds), "-t", trimFloat(duration), "-i", path,
 		"-map", "0:v:0?",
 		"-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-		"-an"}
+		"-an", "-sn"}
 	if width > 0 {
 		args = append(args, "-vf", fmt.Sprintf("scale=%d:-2:flags=lanczos", width))
 	}
@@ -279,6 +289,9 @@ func EncodePreviewClip(ctx context.Context, ffmpegBin, ffprobeBin, path string, 
 
 	var lastErr error
 	for _, seek := range seekTimes(atSeconds) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		data, err := encodePreviewClipAt(ctx, ffmpegBin, ffprobeBin, path, seek, duration, spec, workDir)
 		if err == nil {
 			return data, nil
@@ -304,6 +317,7 @@ func encodePreviewClipAt(ctx context.Context, ffmpegBin, ffprobeBin, path string
 	seekSpec.Trim.Enabled = true
 	seekSpec.Trim.Start = atSeconds
 	seekSpec.Trim.End = atSeconds + duration
+	seekSpec.Subtitle = SubtitleSpec{Mode: "none"}
 
 	args, err := BuildArgs(seekSpec, path, tmpPath, "", 0)
 	if err != nil {
