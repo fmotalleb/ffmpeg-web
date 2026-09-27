@@ -506,3 +506,61 @@ func (m *Manager) DeleteSource(id string, allowed func(string) error) error {
 	m.broker.Publish("job", snapshot)
 	return nil
 }
+
+// MoveInPlace replaces a finished job's source file with what it encoded. The
+// result takes the source's folder and stem, keeping the output's container, so
+// a changed container leaves the old file beside it until it is removed. Only a
+// done job whose source is still there can be moved, and the source is gone
+// afterwards — which the job records, so a retry does not pretend otherwise.
+func (m *Manager) MoveInPlace(id string) error {
+	m.mu.RLock()
+	j, ok := m.jobs[id]
+	if !ok {
+		m.mu.RUnlock()
+		return errors.New("no such job")
+	}
+	if j.Status != storage.StatusDone {
+		m.mu.RUnlock()
+		return errors.New("only a finished job can be moved into place")
+	}
+	if j.SourceDeleted {
+		m.mu.RUnlock()
+		return errors.New("the source file is already gone")
+	}
+	source, output := j.Source, j.Output
+	m.mu.RUnlock()
+
+	if output == "" || output == source {
+		return errors.New("there is nothing to move into place")
+	}
+	if _, err := os.Stat(output); err != nil {
+		return errors.New("the encoded file has been moved or deleted")
+	}
+	if _, err := os.Stat(source); err != nil {
+		return errors.New("the source file has been moved or deleted")
+	}
+
+	target := filepath.Join(
+		filepath.Dir(source),
+		strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))+filepath.Ext(output),
+	)
+	if err := moveIntoPlace(output, target); err != nil {
+		return fmt.Errorf("could not replace the source file: %w", err)
+	}
+	// A changed container gives the result a new name, so the old file is still
+	// sitting beside it and has to go.
+	if target != source {
+		if err := os.Remove(source); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("could not remove the old source file: %w", err)
+		}
+	}
+
+	m.mu.Lock()
+	j.Output = target
+	j.SourceDeleted = true
+	snapshot := j.Clone()
+	m.mu.Unlock()
+	m.save()
+	m.broker.Publish("job", snapshot)
+	return nil
+}

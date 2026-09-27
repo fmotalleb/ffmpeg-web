@@ -173,6 +173,7 @@ func (s *server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/jobs/{id}/retry", s.handleRetryJob)
 	mux.HandleFunc("POST /api/jobs/{id}/move", s.handleMoveJob)
 	mux.HandleFunc("POST /api/jobs/{id}/delete-source", s.handleDeleteSource)
+	mux.HandleFunc("POST /api/jobs/{id}/move-in-place", s.handleMoveInPlace)
 	mux.HandleFunc("DELETE /api/jobs/{id}", s.handleDeleteJob)
 	mux.HandleFunc("GET /api/jobs/{id}/file", s.handleDownload)
 

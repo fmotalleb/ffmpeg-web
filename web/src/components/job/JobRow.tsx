@@ -116,6 +116,23 @@ export function JobRow({ job }: { job: Job }) {
                   )
                 }
               />
+              {!job.sourceDeleted && (
+                <ActionButton
+                  label="Move in place"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        `Replace the original file with the encoded result? ${job.source} — the original will be gone afterwards.`,
+                      )
+                    )
+                      return;
+                    await api(`/api/jobs/${job.id}/move-in-place`, {
+                      method: "POST",
+                    });
+                    toast("Encoded file moved into place", true);
+                  }}
+                />
+              )}
               {!job.sourceDeleted && job.savedPct >= threshold && (
                 <ActionButton
                   label={`Delete source (${Math.round(job.savedPct)}% smaller)`}

@@ -448,6 +448,31 @@ func (s *server) handleDeleteSource(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleMoveInPlace replaces a finished job's source with its encoded result.
+// Only files the sandbox already knows are touched: the result comes from the
+// output folder and the source from an allowed one.
+func (s *server) handleMoveInPlace(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	job, ok := s.jobs.Get(id)
+	if !ok {
+		writeErr(w, http.StatusNotFound, "no such job")
+		return
+	}
+	if err := s.outputAccessible(job.Output); err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
+	if _, err := s.allowedPath(job.Source); err != nil {
+		writeErr(w, http.StatusForbidden, err.Error())
+		return
+	}
+	if err := s.jobs.MoveInPlace(id); err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *server) handleDeleteJob(w http.ResponseWriter, r *http.Request) {
 	if !s.jobs.Remove(r.PathValue("id")) {
 		writeErr(w, http.StatusNotFound, "no such job")
