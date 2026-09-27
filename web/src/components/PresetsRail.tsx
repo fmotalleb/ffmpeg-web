@@ -135,7 +135,6 @@ export function PresetsRail() {
       </div>
       <div className="preset-list">
         <div>
-          <p className="preset-group-name">My presets</p>
           <div className="preset-save">
             <p className="preset-save-title">Save current settings</p>
             <input
@@ -162,6 +161,7 @@ export function PresetsRail() {
               {saving ? "Saving\u2026" : "Save preset"}
             </button>
           </div>
+          <p className="preset-group-name">My presets</p>
           {mine.length === 0 ? (
             <p className="preset-empty">No saved presets yet.</p>
           ) : (

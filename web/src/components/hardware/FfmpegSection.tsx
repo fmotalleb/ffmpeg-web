@@ -1,6 +1,6 @@
 import { useStore } from "../../store";
 import { api, toast } from "../../api";
-import { baseName, formatBytes, formatDuration } from "../../utils";
+import { formatBytes, formatDuration } from "../../utils";
 import type { FfmpegProcess, FfmpegUsage, Job } from "../../types";
 import { Bar } from "./atoms";
 
@@ -100,7 +100,6 @@ function ProcessRow({ proc, cpus, job }: { proc: FfmpegProcess; cpus: number; jo
   const setProcessViewPid = useStore((s) => s.setProcessViewPid);
   const setLogView = useStore((s) => s.setLogView);
 
-  const title = job ? baseName(job.label || job.source) : `${proc.kind} process`;
   const progress = job
     ? [
         `${Math.round(job.progress * 100)}%`,
@@ -115,7 +114,6 @@ function ProcessRow({ proc, cpus, job }: { proc: FfmpegProcess; cpus: number; jo
   return (
     <div className="hw-job">
       <div className="hw-row">
-        <span title={job?.label || job?.source}>{title}</span>
         <span className="hw-value strong">{progress}</span>
       </div>
       <div className="hw-row hw-sub">
