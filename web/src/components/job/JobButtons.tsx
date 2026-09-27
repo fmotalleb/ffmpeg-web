@@ -48,12 +48,16 @@ export function MoveButton({
     <button
       className="btn btn-small btn-quiet move-btn"
       title={delta === 0 ? "Move to the top" : delta < 0 ? "Move up" : "Move down"}
-      onClick={() =>
-        api(`/api/jobs/${id}/move`, {
-          method: "POST",
-          body: JSON.stringify({ delta }),
-        })
-      }
+      onClick={async () => {
+        try {
+          await api(`/api/jobs/${id}/move`, {
+            method: "POST",
+            body: JSON.stringify({ delta }),
+          });
+        } catch (err: unknown) {
+          toast((err as Error).message);
+        }
+      }}
     >
       {glyph}
     </button>

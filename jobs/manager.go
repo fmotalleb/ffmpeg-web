@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -32,7 +33,7 @@ type Manager struct {
 	ffmpeg  string
 	ffprobe string
 	workDir string
-	seq     int
+	seq     atomic.Uint64
 
 	ranSinceIdle bool
 }
@@ -156,8 +157,8 @@ func (m *Manager) save() { m.store.Touch() }
 // NewID mints an id for a job or a batch. The prefix keeps the two apart in the
 // queue file, and the sequence makes an id unique within one millisecond.
 func (m *Manager) NewID(prefix string) string {
-	m.seq++
-	return fmt.Sprintf("%s%d-%d", prefix, time.Now().UnixNano()/1e6, m.seq)
+	seq := m.seq.Add(1)
+	return fmt.Sprintf("%s%d-%d", prefix, time.Now().UnixNano()/1e6, seq)
 }
 
 // Add queues one encode. duration and sourceSize may be zero; the worker
@@ -415,6 +416,11 @@ func (m *Manager) UpdateJob(id string, spec ffmpeg.Spec, output string) error {
 		return errors.New("cannot edit a job while it's encoding — cancel it first")
 	}
 
+	if j.SourceDeleted {
+		m.mu.Unlock()
+		return errors.New("the source file is already gone")
+	}
+
 	resetProgress := j.Status != storage.StatusQueued
 	// A move-in-place job's output path is its source as well, so it must not
 	// be deleted here — that would throw away the only copy.
@@ -544,6 +550,13 @@ func (m *Manager) MoveInPlace(id string) error {
 		filepath.Dir(source),
 		strings.TrimSuffix(filepath.Base(source), filepath.Ext(source))+filepath.Ext(output),
 	)
+	if target != source {
+		if _, err := os.Lstat(target); err == nil {
+			return errors.New("the target file already exists")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("could not check the target file: %w", err)
+		}
+	}
 	if err := moveIntoPlace(output, target); err != nil {
 		return fmt.Errorf("could not replace the source file: %w", err)
 	}

@@ -99,6 +99,9 @@ func (s *server) handleImport(w http.ResponseWriter, r *http.Request) {
 		var output string
 		if spec.MoveInPlace {
 			output = filepath.Join(filepath.Dir(source), stem+"."+spec.Container)
+			if output != source {
+				output = uniquePath(output)
+			}
 		} else {
 			output = job.Output
 			if output == "" || s.insideOutput(output) != nil {

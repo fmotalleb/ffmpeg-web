@@ -364,7 +364,7 @@ func (s *server) handleUpdateJob(w http.ResponseWriter, r *http.Request) {
 
 	dir := filepath.Dir(existing.Output)
 	stem := strings.TrimSuffix(sanitizeName(spec.OutputName), filepath.Ext(spec.OutputName))
-	if stem == "" || stem == "source" {
+	if stem == "" || stem == "source.bin" {
 		stem = strings.TrimSuffix(filepath.Base(existing.Output), filepath.Ext(existing.Output))
 	}
 	var output string

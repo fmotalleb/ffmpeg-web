@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStore } from "../../store";
 import { useSystemStatus } from "../../system";
 import { api, toast } from "../../api";
@@ -16,15 +16,35 @@ export function FfmpegProcessViewer() {
   const [confirming, setConfirming] = useState(false);
   const [killing, setKilling] = useState(false);
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const close = useCallback(() => {
+    setConfirming(false);
+    setKilling(false);
+    setProcessViewPid(null);
+  }, [setProcessViewPid]);
+
+  useEffect(() => {
+    if (pid == null) return;
+    const previousFocus = document.activeElement;
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [pid, close]);
+
   if (pid == null) return null;
 
   const proc = status?.ffmpegUsage.processes.find((p) => p.pid === pid) ?? null;
   const job = proc?.jobId ? jobs.get(proc.jobId) ?? null : null;
-
-  const close = () => {
-    setConfirming(false);
-    setProcessViewPid(null);
-  };
 
   const kill = async () => {
     setKilling(true);
@@ -46,7 +66,7 @@ export function FfmpegProcessViewer() {
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="modal-card process-modal" role="dialog" aria-modal="true" aria-labelledby="process-title">
+      <div ref={dialogRef} tabIndex={-1} className="modal-card process-modal" role="dialog" aria-modal="true" aria-labelledby="process-title">
         <header className="modal-head">
           <h2 id="process-title">
             Process <span className="log-pid">pid {pid}</span>

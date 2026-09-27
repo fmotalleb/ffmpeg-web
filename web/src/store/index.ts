@@ -16,6 +16,7 @@ export const useStore = create<AppState>((set, _get) => ({
   settings: defaultSettings(),
   queue: { paused: false, settings: defaultQueueSettings() },
   jobs: new Map(),
+  jobsLoaded: false,
   editingJobId: null,
   previewJobId: null,
   activeTab: "summary",
@@ -154,8 +155,8 @@ export const useStore = create<AppState>((set, _get) => ({
       jobs.forEach((j) => map.set(j.id, j));
       // Newly queued work is the queue's cue to show itself: a job that was not
       // here a moment ago and is waiting to run opens the closed list.
-      const queued = jobs.some((j) => j.status === "queued" && !s.jobs.has(j.id));
-      return queued ? { jobs: map, queueCollapsed: false } : { jobs: map };
+      const queued = s.jobsLoaded && jobs.some((j) => j.status === "queued" && !s.jobs.has(j.id));
+      return { jobs: map, jobsLoaded: true, queueCollapsed: queued ? false : s.queueCollapsed };
     }),
 
   updateJob: (job) =>

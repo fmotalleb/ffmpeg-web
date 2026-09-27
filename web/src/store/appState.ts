@@ -15,6 +15,7 @@ export interface AppState {
   settings: Spec;
   queue: { paused: boolean; settings: QueueSettings };
   jobs: Map<string, Job>;
+  jobsLoaded: boolean;
   editingJobId: string | null;
   previewJobId: string | null;
   activeTab: string;
