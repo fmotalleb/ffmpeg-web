@@ -49,14 +49,9 @@ export function HardwareStatus() {
 
       {open && (
         <div className="hw-panel" role="dialog" aria-label="Hardware monitor">
-          <p className="hw-panel-note">
-            Live read-out of this machine and its encoders — nothing here changes
-            the queue, it only reports what is happening.
-          </p>
           <FfmpegSection usage={status?.ffmpegUsage} jobs={running} cpus={status?.cpus ?? 1} />
-          <EncoderSection status={status} />
-          <DeviceSection status={status} />
           <MachineSection status={status} />
+          <DeviceSection status={status} />
           {status && (
             <p className="hw-foot">
               {[
@@ -68,6 +63,7 @@ export function HardwareStatus() {
                 .join(" · ")}
             </p>
           )}
+          <EncoderSection status={status} />
         </div>
       )}
     </div>
