@@ -48,7 +48,9 @@ export const useStore = create<AppState>((set, _get) => ({
   logViewTitle: "",
   railCollapsed: false,
   queueSettingsOpen: false,
-  queueCollapsed: false,
+  // The queue is a drawer, not the main view: it starts closed and opens
+  // itself when something is queued (see setJobs/updateJob).
+  queueCollapsed: true,
   encoders: { kinds: [], libraries: [] },
 
   setSource: (info) =>
@@ -146,16 +148,23 @@ export const useStore = create<AppState>((set, _get) => ({
     set((s) => ({ queue: { ...s.queue, settings } })),
 
   setJobs: (jobs) =>
-    set(() => {
+    set((s) => {
       const map = new Map<string, Job>();
       jobs.forEach((j) => map.set(j.id, j));
-      return { jobs: map };
+      // Newly queued work is the queue's cue to show itself: a job that was not
+      // here a moment ago and is waiting to run opens the closed list.
+      const queued = jobs.some((j) => j.status === "queued" && !s.jobs.has(j.id));
+      return queued ? { jobs: map, queueCollapsed: false } : { jobs: map };
     }),
 
   updateJob: (job) =>
     set((s) => {
       const jobs = new Map(s.jobs);
+      const isNew = !jobs.has(job.id);
       jobs.set(job.id, job);
+      if (isNew && job.status === "queued") {
+        return { jobs, queueCollapsed: false };
+      }
       return { jobs };
     }),
 
