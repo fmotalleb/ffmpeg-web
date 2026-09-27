@@ -95,7 +95,7 @@ func buildPresets() []Preset {
 	av1web.Audio.Bitrate = 128
 	av1web.Picture = ffmpeg.PictureSpec{ScaleMode: "custom", Width: 1920, Height: 1080, KeepAspect: true}
 
-	vp9web := base("mkv")
+	vp9web := base("webm")
 	vp9web.WebOptimize = true
 	vp9web.Video = ffmpeg.VideoSpec{
 		Encoder: "vp9", RateMode: "quality", Quality: 31, Speed: "medium",
