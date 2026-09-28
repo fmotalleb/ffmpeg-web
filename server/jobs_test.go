@@ -45,6 +45,53 @@ func TestEditEmptyOutputName(t *testing.T) {
 	}
 }
 
+// Queueing a name that is already taken asks instead of renaming the output to
+// "name (1)", and it never writes over the source unless the job takes the
+// move-in-place route, which only swaps a finished, checked encode into place.
+func TestCheckOutputName(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "movie.mkv")
+	taken := filepath.Join(dir, "encoded", "movie.mp4")
+	if err := os.MkdirAll(filepath.Dir(taken), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{source, taken} {
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	free := filepath.Join(dir, "encoded", "fresh.mp4")
+
+	tests := []struct {
+		name      string
+		moveIn    bool
+		output    string
+		overwrite bool
+		want      string
+	}{
+		{"free name", false, free, false, ""},
+		{"taken name asks first", false, taken, false, "output-exists"},
+		{"taken name with overwrite", false, taken, true, ""},
+		{"source name asks first", false, source, false, "output-is-source"},
+		{"source name with overwrite", false, source, true, ""},
+		{"move in place already asked", true, source, false, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := ffmpeg.Spec{MoveInPlace: tc.moveIn}
+			got := checkOutputName(&spec, source, tc.output, tc.overwrite)
+			if got != tc.want {
+				t.Fatalf("checkOutputName = %q, want %q", got, tc.want)
+			}
+			// Only a confirmed source overwrite switches the job to the safe route.
+			wantInPlace := tc.moveIn || (tc.output == source && tc.overwrite)
+			if spec.MoveInPlace != wantInPlace {
+				t.Fatalf("moveInPlace = %v, want %v", spec.MoveInPlace, wantInPlace)
+			}
+		})
+	}
+}
+
 // The details view shows the command ffmpeg was handed, so the endpoint has to
 // hand back the real thing: the job's own paths, the seek, the trim length in
 // its output position, and the output file last.

@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { useStore } from "../store";
-import { api, toast } from "../api";
+import { ApiError, api, toast } from "../api";
 import { HardwareStatus } from "./hardware";
 import { Icon } from "./icons";
 import type { MediaInfo } from "../types";
@@ -29,6 +29,44 @@ export function TopBar() {
       toast(`${info.name} is ready to encode`, true);
     } catch (err: unknown) {
       toast((err as Error).message);
+    }
+  };
+
+  // A queued name that is already taken comes back as a refusal rather than a
+  // silent rename to "name (1)", so ask which one the user meant: write over
+  // what is there, or leave the queue alone. Overwriting the source itself is
+  // safe by construction — that run encodes elsewhere and swaps on success.
+  const queue = async (overwrite: boolean) => {
+    const { settings, source: chosen } = useStore.getState();
+    if (!chosen) return;
+    settings.input = chosen.path;
+    await api(`/api/jobs${overwrite ? "?overwrite=1" : ""}`, {
+      method: "POST",
+      body: JSON.stringify(settings),
+    });
+  };
+
+  const handleQueue = async () => {
+    try {
+      await queue(false);
+      toast("Added to the queue", true);
+      return;
+    } catch (err: unknown) {
+      if (!(err instanceof ApiError) || !err.code.startsWith("output-")) {
+        toast((err as Error).message);
+        return;
+      }
+      const question =
+        err.code === "output-is-source"
+          ? `${err.message}. The encode is written elsewhere first and swapped in when it finishes, so a failed run leaves the original alone.\n\nReplace it with the result?`
+          : `${err.message}. The existing file is written straight over — if the encode falls short, what was there is gone.\n\nOverwrite it?`;
+      if (!confirm(question)) return; // cancel: nothing is queued
+      try {
+        await queue(true);
+        toast("Added to the queue, replacing the file that was there", true);
+      } catch (retryErr: unknown) {
+        toast((retryErr as Error).message);
+      }
     }
   };
 
@@ -95,13 +133,7 @@ export function TopBar() {
                   })
                   .catch((err) => toast(err.message));
               } else {
-                settings.input = useStore.getState().source!.path;
-                api("/api/jobs", {
-                  method: "POST",
-                  body: JSON.stringify(settings),
-                })
-                  .then(() => toast("Added to the queue", true))
-                  .catch((err) => toast(err.message));
+                void handleQueue();
               }
             }}
           >

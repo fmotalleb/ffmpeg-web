@@ -151,18 +151,15 @@ func (s *server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	var output string
 	if spec.MoveInPlace {
 		// The result takes the source's place: same folder, same name, with the
-		// chosen container deciding the extension. A rename onto the source
-		// itself is the point here, not a mistake to reject.
+		// chosen container deciding the extension.
 		output = filepath.Join(filepath.Dir(source), base+"."+spec.Container)
-		if output != source {
-			output = uniquePath(output)
-		}
 	} else {
-		output = uniquePath(filepath.Join(s.outDir, base+"."+spec.Container))
-		if output == source {
-			writeErr(w, http.StatusConflict, "the output would overwrite the source")
-			return
-		}
+		output = filepath.Join(s.outDir, base+"."+spec.Container)
+	}
+
+	if code := checkOutputName(&spec, source, output, r.URL.Query().Get("overwrite") == "1"); code != "" {
+		writeOutputTaken(w, output, code)
+		return
 	}
 
 	job := s.jobs.Add(spec, source, output, filepath.Base(source), "", info.Duration, float64(st.Size()))
@@ -304,6 +301,54 @@ func (s *server) handlePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"bin": s.ffmpeg, "args": args})
+}
+
+// checkOutputName decides whether a job may write to output. A name that is
+// already taken is the user's decision, not a detail to paper over: rather than
+// rename the file behind their back, the queue request is refused with the
+// reason, and the browser either drops the job or asks again with overwrite=1.
+// Asking for the source's own name switches the job to the move-in-place route,
+// which replaces the original only with a finished, checked encode.
+func checkOutputName(spec *ffmpeg.Spec, source, output string, overwrite bool) string {
+	switch {
+	case output == source && spec.MoveInPlace:
+		// Replacing the source is exactly what was asked for, and the worker
+		// does it safely, so there is nothing to confirm.
+		return ""
+	case output == source:
+		if !overwrite {
+			return "output-is-source"
+		}
+		spec.MoveInPlace = true
+		return ""
+	case fileExists(output):
+		if !overwrite {
+			return "output-exists"
+		}
+	}
+	return ""
+}
+
+// writeOutputTaken answers a queue request whose name is already in use. The
+// browser turns this into an overwrite question and repeats the request with
+// overwrite=1, so the payload says which file is in the way and whether that
+// file is the source being encoded — replacing the source is the case worth a
+// second look on screen.
+func writeOutputTaken(w http.ResponseWriter, path, code string) {
+	isSource := code == "output-is-source"
+	what := fmt.Sprintf("%s already exists in the encode folder", filepath.Base(path))
+	if isSource {
+		what = fmt.Sprintf("%s is the source file itself", filepath.Base(path))
+	}
+	writeJSON(w, http.StatusConflict, map[string]any{
+		"error": what, "code": code, "path": path, "source": isSource,
+	})
+}
+
+// fileExists reports whether anything already occupies a path.
+func fileExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
 }
 
 func uniquePath(p string) string {

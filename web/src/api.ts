@@ -1,5 +1,16 @@
 import type { BrowseResponse, MediaInfo, PreviewCommand, Preset, ScanResponse, Spec } from "./types";
 
+// ApiError carries the server's own reason code, so a caller can tell one kind
+// of refusal from another — queueing a name that is already taken, for one.
+export class ApiError extends Error {
+  readonly code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+  }
+}
+
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     headers: options.body instanceof FormData ? {} : { "Content-Type": "application/json" },
@@ -8,7 +19,12 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
   if (res.status === 204) return null as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error((data && data.error) || `request failed (${res.status})`);
+  if (!res.ok) {
+    throw new ApiError(
+      (data && data.error) || `request failed (${res.status})`,
+      (data && data.code) || "",
+    );
+  }
   return data as T;
 }
 
