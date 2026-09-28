@@ -321,6 +321,18 @@ func uniquePath(p string) string {
 	return fmt.Sprintf("%s-%d%s", stem, time.Now().Unix(), ext)
 }
 
+// handleJobCommand hands back the ffmpeg command line a job is running, worked
+// out from the job itself rather than read back from a log, so the details view
+// shows the real thing — temp paths, pass log and pass number included.
+func (s *server) handleJobCommand(w http.ResponseWriter, r *http.Request) {
+	bin, args, err := s.jobs.Command(r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"bin": bin, "args": args})
+}
+
 func (s *server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.jobs.Get(r.PathValue("id"))
 	if !ok {

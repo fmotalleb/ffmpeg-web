@@ -503,22 +503,27 @@ func BuildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 		args = append(args, "-vaapi_device", vaapiDevice())
 	}
 
+	// Every added file is seeked to the same point as the source. Seeking is
+	// what rebases a stream onto the start of the clip, so without it a copied
+	// subtitle or audio track would keep its timestamps from the full source
+	// and land after the trimmed video instead of on top of it.
+	seek := []string{}
 	if s.Trim.Enabled && s.Trim.Start > 0 {
-		args = append(args, "-ss", trimFloat(s.Trim.Start))
+		seek = append(seek, "-ss", trimFloat(s.Trim.Start))
 	}
+	args = append(args, seek...)
 	args = append(args, "-i", input)
-	if s.Trim.Enabled && s.Trim.End > s.Trim.Start {
-		args = append(args, "-t", trimFloat(s.Trim.End-s.Trim.Start))
-	}
 
 	// Every added audio or subtitle file is an input of its own. Where they sit
 	// in the command line decides the numbers the -map calls below use: the
 	// source is input 0, then the added audio files, then the subtitles.
 	audioExtra, subExtra := presentExtras(s)
 	for _, t := range audioExtra {
+		args = append(args, seek...)
 		args = append(args, "-i", t.Path)
 	}
 	for _, t := range subExtra {
+		args = append(args, seek...)
 		args = append(args, "-i", t.Path)
 	}
 	subBase := 1 + len(audioExtra)
@@ -666,6 +671,13 @@ func BuildArgs(s Spec, input, output, passLog string, pass int) ([]string, error
 
 	if s.WebOptimize && s.Container == "mp4" && pass != 1 {
 		args = append(args, "-movflags", "+faststart")
+	}
+
+	// The trim length is an output option, so it has to sit after every input:
+	// next to an -i ffmpeg reads it as an input option and applies it to that
+	// file, which quietly drops the trim end and lets the clip run on.
+	if s.Trim.Enabled && s.Trim.End > s.Trim.Start {
+		args = append(args, "-t", trimFloat(s.Trim.End-s.Trim.Start))
 	}
 
 	args = append(args, outputExtra...)

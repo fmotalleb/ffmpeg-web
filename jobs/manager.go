@@ -211,6 +211,32 @@ func (m *Manager) FfmpegPIDs() map[string]int {
 	return out
 }
 
+// Command rebuilds the ffmpeg command line of a job the way the worker builds
+// it: same temp target for a move-in-place run, same pass log, and for a
+// two-pass job the pass it is on right now. The details view shows it, so what
+// is on screen is the command line that is actually running.
+func (m *Manager) Command(id string) (string, []string, error) {
+	m.mu.RLock()
+	src, ok := m.jobs[id]
+	if !ok {
+		m.mu.RUnlock()
+		return "", nil, fmt.Errorf("no such job")
+	}
+	job := src.Clone()
+	m.mu.RUnlock()
+
+	pass := 0
+	if job.Passes == 2 {
+		pass = job.Pass
+	}
+	args, err := ffmpeg.BuildArgs(job.Spec, job.Source, m.encodeTarget(&job),
+		filepath.Join(m.workDir, job.ID), pass)
+	if err != nil {
+		return "", nil, err
+	}
+	return m.ffmpeg, args, nil
+}
+
 func (m *Manager) Get(id string) (storage.Job, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

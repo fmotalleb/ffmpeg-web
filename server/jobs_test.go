@@ -45,6 +45,74 @@ func TestEditEmptyOutputName(t *testing.T) {
 	}
 }
 
+// The details view shows the command ffmpeg was handed, so the endpoint has to
+// hand back the real thing: the job's own paths, the seek, the trim length in
+// its output position, and the output file last.
+func TestJobCommandReportsTheRealCommand(t *testing.T) {
+	s := testJobServer(t)
+	source := filepath.Join(s.mediaRoot, "input.mkv")
+	output := filepath.Join(s.outDir, "result.mkv")
+	spec := ffmpeg.Spec{
+		Container: "mkv",
+		Video:     ffmpeg.VideoSpec{Encoder: "copy"},
+		Audio:     ffmpeg.AudioSpec{Encoder: "none"},
+		Trim:      ffmpeg.TrimSpec{Enabled: true, Start: 10, End: 25},
+	}
+	job := s.jobs.Add(spec, source, output, "", "", 0, 0)
+
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/"+job.ID+"/command", nil)
+	r.SetPathValue("id", job.ID)
+	w := httptest.NewRecorder()
+	s.handleJobCommand(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("command failed: %d %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Bin  string   `json:"bin"`
+		Args []string `json:"args"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	lastInput := -1
+	trim := -1
+	for i, a := range got.Args {
+		switch a {
+		case "-i":
+			lastInput = i
+		case "-t":
+			trim = i
+		}
+	}
+	if lastInput < 0 {
+		t.Fatalf("no input in %v", got.Args)
+	}
+	if got.Args[lastInput+1] != source {
+		t.Fatalf("input = %q, want %q", got.Args[lastInput+1], source)
+	}
+	if lastInput < 2 || got.Args[lastInput-2] != "-ss" || got.Args[lastInput-1] != "10" {
+		t.Fatalf("missing the seek to the trim start: %v", got.Args)
+	}
+	if trim < lastInput || got.Args[trim+1] != "15" {
+		t.Fatalf("trim length is not an output option: %v", got.Args)
+	}
+	if last := got.Args[len(got.Args)-1]; last != output {
+		t.Fatalf("output = %q, want %q last", last, output)
+	}
+}
+
+func TestJobCommandUnknownJob(t *testing.T) {
+	s := testJobServer(t)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/jobs/nope/command", nil)
+	r.SetPathValue("id", "nope")
+	w := httptest.NewRecorder()
+	s.handleJobCommand(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown job answered %d, want 404", w.Code)
+	}
+}
+
 func TestImportMoveInPlaceOutput(t *testing.T) {
 	for _, sameContainer := range []bool{false, true} {
 		t.Run(map[bool]string{false: "neighbor", true: "source"}[sameContainer], func(t *testing.T) {

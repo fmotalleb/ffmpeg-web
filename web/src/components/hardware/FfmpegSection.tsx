@@ -93,9 +93,10 @@ export function FfmpegSection({
   );
 }
 
-// ProcessRow is one ffmpeg or ffprobe process: what it is encoding, if anything,
-// then that process's own pid, CPU and memory. Details opens the process
-// viewer, Log tails its own log file.
+// ProcessRow is one ffmpeg or ffprobe process: which job it belongs to, its pid,
+// and its own counters. The numbers are laid out as label/value rows rather than
+// one long line, so a busy process reads the same way as the totals above it.
+// Details opens the process viewer, Log tails its own log file.
 function ProcessRow({ proc, cpus, job }: { proc: FfmpegProcess; cpus: number; job: Job | null }) {
   const setProcessViewPid = useStore((s) => s.setProcessViewPid);
   const setLogView = useStore((s) => s.setLogView);
@@ -109,41 +110,57 @@ function ProcessRow({ proc, cpus, job }: { proc: FfmpegProcess; cpus: number; jo
       ]
         .filter(Boolean)
         .join(" \u00b7 ")
-    : `pid ${proc.pid}`;
+    : "";
 
   return (
-    <div className="hw-job">
-      <div className="hw-row">
-        <span className="hw-value strong">{progress}</span>
-      </div>
-      <div className="hw-row hw-sub">
-        <span className="hw-pid">
-          {proc.kind} pid {proc.pid}
+    <div className="hw-proc">
+      <div className="hw-proc-head">
+        <span className="hw-proc-title">
+          <span className="hw-proc-kind">{proc.kind}</span>
+          <span className="hw-proc-pid">pid {proc.pid}</span>
+        </span>
+        <span className="hw-proc-actions">
           <button
-            className="btn btn-small btn-quiet hw-log-btn"
+            className="btn btn-small btn-quiet hw-proc-btn"
             title="Tail this process's log"
             onClick={() => setLogView(proc.pid, `pid ${proc.pid}`)}
           >
             Log
           </button>
           <button
-            className="btn btn-small btn-quiet hw-log-btn"
+            className="btn btn-small btn-quiet hw-proc-btn"
             title="Show this process's details"
             onClick={() => setProcessViewPid(proc.pid)}
           >
             Details
           </button>
         </span>
-        <span className="hw-value">
+      </div>
+      {job && (
+        <p className="hw-proc-label" title={job.label}>
+          {job.label}
+        </p>
+      )}
+      <div className="hw-proc-table">
+        {progress !== "" && (
+          <>
+            <span className="hw-proc-key">Progress</span>
+            <span className="hw-proc-val strong">{progress}</span>
+          </>
+        )}
+        <span className="hw-proc-key">CPU</span>
+        <span className="hw-proc-val">
           {[
-            proc.sampled ? `CPU ${Math.round(proc.cpu)}%` : "measuring cpu\u2026",
+            proc.sampled ? `${Math.round(proc.cpu)}%` : "measuring\u2026",
             cpus > 1 && proc.sampled ? `${(proc.cpu / cpus).toFixed(1)}% of this machine` : "",
-            `RAM ${formatBytes(proc.rss)}`,
-            `${proc.threads} threads`,
           ]
             .filter(Boolean)
             .join(" \u00b7 ")}
         </span>
+        <span className="hw-proc-key">RAM</span>
+        <span className="hw-proc-val">{formatBytes(proc.rss)}</span>
+        <span className="hw-proc-key">Threads</span>
+        <span className="hw-proc-val">{proc.threads}</span>
       </div>
     </div>
   );

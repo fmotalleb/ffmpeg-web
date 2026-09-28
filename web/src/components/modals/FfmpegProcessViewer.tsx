@@ -3,6 +3,7 @@ import { useStore } from "../../store";
 import { useSystemStatus } from "../../system";
 import { api, toast } from "../../api";
 import { baseName, formatBytes, formatDuration } from "../../utils";
+import type { PreviewCommand } from "../../types";
 
 // FfmpegProcessViewer is the details view of one ffmpeg process: everything the
 // hardware report knows about that pid, refreshed by the same poll as the
@@ -15,8 +16,44 @@ export function FfmpegProcessViewer() {
   const { status, error } = useSystemStatus();
   const [confirming, setConfirming] = useState(false);
   const [killing, setKilling] = useState(false);
+  const [command, setCommand] = useState<PreviewCommand | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null);
 
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  // The process is looked up above the early return: hooks run in the same order
+  // every render, and the command has to load before anything is drawn.
+  const proc =
+    pid == null ? null : status?.ffmpegUsage.processes.find((p) => p.pid === pid) ?? null;
+  const jobId = proc?.jobId ?? null;
+  const job = jobId ? jobs.get(jobId) ?? null : null;
+  const pass = job?.pass ?? 0;
+
+  // The server rebuilds the command from the job, so this is the line ffmpeg is
+  // running right now — temp target, pass log and pass number included. A
+  // two-pass run is re-read when it moves on to its second pass.
+  useEffect(() => {
+    if (jobId == null) {
+      setCommand(null);
+      setCommandError(null);
+      return;
+    }
+    let live = true;
+    api<PreviewCommand>(`/api/jobs/${encodeURIComponent(jobId)}/command`)
+      .then((cmd) => {
+        if (!live) return;
+        setCommand(cmd);
+        setCommandError(null);
+      })
+      .catch((err: unknown) => {
+        if (!live) return;
+        setCommand(null);
+        setCommandError((err as Error).message);
+      });
+    return () => {
+      live = false;
+    };
+  }, [jobId, pass]);
 
   const close = useCallback(() => {
     setConfirming(false);
@@ -42,9 +79,6 @@ export function FfmpegProcessViewer() {
   }, [pid, close]);
 
   if (pid == null) return null;
-
-  const proc = status?.ffmpegUsage.processes.find((p) => p.pid === pid) ?? null;
-  const job = proc?.jobId ? jobs.get(proc.jobId) ?? null : null;
 
   const kill = async () => {
     setKilling(true);
@@ -129,6 +163,25 @@ export function FfmpegProcessViewer() {
                     </span>
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {jobId && (
+            <div className="proc-command">
+              <h3 className="group-title">
+                Command that is running
+                {job && job.passes === 2 ? ` \u2014 pass ${job.pass} of ${job.passes}` : ""}
+              </h3>
+              {commandError && <p className="note">{commandError}</p>}
+              {!commandError && !command && <p className="note">Loading the command\u2026</p>}
+              {!commandError && command && (
+                <pre className="cmd-preview">
+                  <b>{command.bin}</b>{" "}
+                  {command.args
+                    .map((a) => (/\s/.test(a) ? `"${a}"` : a))
+                    .join(" ")}
+                </pre>
               )}
             </div>
           )}
