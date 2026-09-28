@@ -41,13 +41,13 @@ func main() {
 	)
 
 	// Parse command-line arguments using struct-based configuration
-	cfg, err := parseConfig(logger)
+	cfg, err := parseConfig()
 	if err != nil {
 		logger.Fatal("failed to parse configuration", zap.Error(err))
 	}
 
 	// Process and validate configuration
-	processed, err := processConfig(cfg, logger)
+	processed, err := processConfig(cfg)
 	if err != nil {
 		logger.Fatal("configuration error", zap.Error(err))
 	}
@@ -145,7 +145,7 @@ func main() {
 }
 
 // parseConfig parses command-line arguments and environment variables into a Config struct
-func parseConfig(logger *zap.Logger) (*Config, error) {
+func parseConfig() (*Config, error) {
 	cfg := &Config{}
 	fs := varg.New("ffmpeg-web").
 		About(`A single Go binary that serves a browser UI for transcoding video. Presets,
@@ -179,7 +179,7 @@ survives a crash, output verification, and post-encode actions.`).
 }
 
 // processConfig validates and processes the raw configuration
-func processConfig(cfg *Config, logger *zap.Logger) (*ProcessedConfig, error) {
+func processConfig(cfg *Config) (*ProcessedConfig, error) {
 	// Convert paths to absolute paths
 	mediaRoot, err := filepath.Abs(cfg.Root)
 	if err != nil {
