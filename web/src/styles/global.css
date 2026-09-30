@@ -186,6 +186,12 @@ a.btn-star:hover {
   border-radius: var(--radius);
   white-space: nowrap;
 }
+/* Result reads as the orange accent, source as teal, so the two are never
+   confused at a glance. */
+.diff-mag-label.is-result {
+  color: var(--amber);
+  background: rgba(224,165,86,0.12);
+}
 
 /* ---------- original / overlay labels ---------- */
 
@@ -206,8 +212,8 @@ a.btn-star:hover {
   letter-spacing: 0.03em;
 }
 
-.original-label { top: 8px; }
-.result-label { top: 8px; }
+.original-label { top: 8px; color: var(--teal); background: rgba(89,191,176,0.12); }
+.result-label { top: 8px; color: var(--amber); background: rgba(224,165,86,0.16); }
 .overlay-info-label { bottom: 8px; left: 8px; }
 .flicker-label { top: 8px; left: 50%; transform: translateX(-50%); }
 .diff-info-label { bottom: 8px; left: 50%; transform: translateX(-50%); }
@@ -1261,6 +1267,7 @@ a.btn-star:hover {
   font-weight: 600;
 }
 .job-pct { color: var(--ink); font-weight: 500; }
+.job-calc { color: var(--ink-dim); font-style: italic; }
 
 .job-bar {
   height: 4px;
@@ -1884,6 +1891,27 @@ code {
   background-color: #05070a;
   box-shadow: 0 0 0 2000px rgba(5, 7, 10, 0.35), 0 4px 14px rgba(0, 0, 0, 0.5);
 }
+.diff-lens.is-result { border-color: var(--amber); }
+
+/* The lens covers the stage, so the "is this the result or the source?"
+   answer rides on top of the zoom area instead of living in the toolbar. */
+.diff-lens-label {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  padding: 1px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: rgba(5, 7, 10, 0.72);
+}
+.diff-lens-label.is-result { color: var(--amber); }
+.diff-lens-label.is-source { color: var(--teal); }
 
 .diff-empty {
   position: absolute;
@@ -1922,6 +1950,8 @@ code {
   overflow: hidden;
   display: flex;
 }
+.diff-sbs figure.sbs-source { border-color: rgba(89,191,176,0.45); }
+.diff-sbs figure.sbs-result { border-color: rgba(224,165,86,0.55); }
 .diff-sbs video { width: 100%; height: 100%; object-fit: contain; }
 .diff-sbs figcaption {
   position: absolute;
@@ -1933,6 +1963,8 @@ code {
   padding: 1px 6px;
   border-radius: 3px;
 }
+.diff-sbs .sbs-source figcaption { color: var(--teal); background: rgba(89,191,176,0.12); }
+.diff-sbs .sbs-result figcaption { color: var(--amber); background: rgba(224,165,86,0.16); }
 
 .diff-downloads {
   display: flex;

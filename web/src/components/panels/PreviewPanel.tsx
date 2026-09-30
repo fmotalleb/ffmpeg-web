@@ -686,7 +686,15 @@ export function PreviewPanel() {
           <span />
         </div>
       )}
-      <div ref={lensRef} className="diff-lens" hidden={!diff.magnifier} />
+      <div
+        ref={lensRef}
+        className={`diff-lens ${magnifierShowsTarget ? "is-result" : "is-source"}`}
+        hidden={!diff.magnifier}
+      >
+        <span className={`diff-lens-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
+          {magnifierShowsTarget ? "Result" : "Source"}
+        </span>
+      </div>
       <canvas
         ref={diffCanvasRef}
         className="diff-canvas"
@@ -695,11 +703,11 @@ export function PreviewPanel() {
     </div>
   ) : (
     <div className="diff-sbs">
-      <figure>
+      <figure className="sbs-source">
         <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
         <figcaption>Source</figcaption>
       </figure>
-      <figure>
+      <figure className="sbs-result">
         <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
         <figcaption>Result</figcaption>
       </figure>
@@ -863,7 +871,7 @@ export function PreviewPanel() {
           <span>Magnifier — click to switch, scroll to zoom</span>
         </label>
         {diff.magnifier && (
-          <span className="diff-mag-label">
+          <span className={`diff-mag-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
             Viewing: {magnifierShowsTarget ? "Result" : "Source"}
           </span>
         )}

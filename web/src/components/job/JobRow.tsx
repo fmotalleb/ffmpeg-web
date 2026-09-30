@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useStore } from "../../store";
 import { api, toast } from "../../api";
 import { baseName, formatBytes, formatDuration } from "../../utils";
@@ -13,6 +14,19 @@ const STATUS_LABELS: Record<string, string> = {
   failed: "failed",
   canceled: "cancelled",
 };
+
+// A running encode started at a fixed instant, so the elapsed time only means
+// anything if it keeps moving: tick it once a second while the row is mounted.
+function ElapsedTime({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const start = new Date(since).getTime();
+  if (!start || isNaN(start)) return null;
+  return <span>{(now - start) / 1000 > 0 ? formatDuration((now - start) / 1000) : "0:00"} elapsed</span>;
+}
 
 export function JobRow({ job }: { job: Job }) {
   const setActiveTab = useStore((s) => s.setActiveTab);
@@ -39,11 +53,6 @@ export function JobRow({ job }: { job: Job }) {
     job.sourceSize > 0 && projectedSize > 0
       ? (1 - projectedSize / job.sourceSize) * 100
       : 0;
-
-  const handlePreview = async () => {
-    useStore.getState().setPreviewJobId(job.id);
-    setActiveTab("preview");
-  };
 
   const handleEdit = async () => {
     try {
@@ -85,7 +94,6 @@ export function JobRow({ job }: { job: Job }) {
           </span>
         )}
         <div className="job-actions">
-          <ActionButton label="Preview" onClick={handlePreview} />
           {job.status !== "running" && (
             <ActionButton label="Edit" onClick={handleEdit} />
           )}
@@ -192,9 +200,16 @@ export function JobRow({ job }: { job: Job }) {
                 {"\u00d7"} realtime
               </span>
             )}
-            {job.eta > 0 && <span>{formatDuration(job.eta)} left</span>}
-            {projectedSize > 0 && (
-              <span>heading for about {formatBytes(projectedSize)}</span>
+            {job.started && <ElapsedTime since={job.started} />}
+            {projectedSize > 0 ? (
+              <>
+                {job.eta > 0 && <span>{formatDuration(job.eta)} left</span>}
+                <span>heading for about {formatBytes(projectedSize)}</span>
+              </>
+            ) : (
+              // No output size yet — ffmpeg has not reported enough progress
+              // for the projection to mean anything, so say so plainly.
+              <span className="job-calc">calculating the result approximate size…</span>
             )}
             {job.sourceSize > 0 && projectedSize > 0 && (
               <SavingFact pct={projectedPct} projected />
