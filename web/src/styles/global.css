@@ -1821,6 +1821,124 @@ code {
   background: var(--bg);
 }
 
+/* ---------- API queue monitor ---------- */
+
+.api-queue {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  z-index: 25;
+  width: 380px;
+  max-height: 200px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.api-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--raised);
+}
+
+.api-queue-title {
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.api-queue-clear {
+  padding: 2px 8px;
+  font-size: 10px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.api-queue-clear:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.api-queue-section {
+  padding: 6px 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.api-queue-section + .api-queue-section {
+  border-top: 1px solid var(--line-soft);
+}
+
+.api-queue-section-title {
+  display: block;
+  padding: 4px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
+.api-call-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.api-call-row.running {
+  color: var(--amber);
+}
+.api-call-row.success {
+  color: var(--teal);
+}
+.api-call-row.error {
+  color: var(--rose);
+}
+
+.api-method {
+  flex: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  min-width: 36px;
+}
+
+.api-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.api-duration {
+  flex: none;
+  color: var(--ink-dim);
+  min-width: 45px;
+  text-align: right;
+}
+
+.api-error {
+  flex: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
 /* ---------- preview / compare tool ---------- */
 
 .preview-subject {
