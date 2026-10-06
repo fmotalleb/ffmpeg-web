@@ -31,8 +31,9 @@ export const useApiMonitor = create<ApiMonitorState>((set) => ({
       startTime: Date.now(),
       status: "running",
     };
+    // New calls go to the top (most recent first)
     set((state) => ({
-      activeCalls: [...state.activeCalls, call],
+      activeCalls: [call, ...state.activeCalls],
     }));
     return id;
   },

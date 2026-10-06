@@ -7,8 +7,11 @@ function formatDuration(ms: number): string {
 }
 
 function ApiCallRow({ call }: { call: ApiCall }) {
-  const isError = call.status === "error";
-  const isSuccess = call.status === "success";
+  // Status should always be set: "running", "success", or "error"
+  // Default to "running" if somehow missing (shouldn't happen)
+  const status = call.status ?? "running";
+  const isError = status === "error";
+  const isSuccess = status === "success";
 
   return (
     <div className={`api-call-row ${isError ? "error" : isSuccess ? "success" : "running"}`}>
