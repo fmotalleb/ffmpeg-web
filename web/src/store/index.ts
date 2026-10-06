@@ -126,19 +126,29 @@ export const useStore = create<AppState>((set, _get) => ({
   applyPreset: (preset) =>
     set((s) => {
       const settings = normalizeSpec(structuredClone(preset.settings));
+      // Preserve the current source and output settings — a preset only carries
+      // encoding choices, not file-specific track choices.
       settings.outputName = s.settings.outputName;
       settings.extra = s.settings.extra;
       settings.input = s.source ? s.source.path : "";
-      // A preset never carries track lists — they belong to the file being
-      // worked on — so refill them from the current source and keep every
-      // track instead of falling back to a single one.
+      // Keep the current audio/subtitle track selections from the source file.
+      // A preset does not add or remove tracks; it only changes how the selected
+      // tracks are encoded. The track lists belong to the file, not the preset.
       if (s.source) {
         const audioTracks = s.source.audio.map((t) => t.index);
         const subTracks = s.source.subtitles.map((t) => t.index);
-        settings.audio.track = audioTracks[0] ?? 0;
-        settings.audio.tracks = audioTracks;
-        settings.subtitle.track = subTracks[0] ?? 0;
-        settings.subtitle.tracks = subTracks;
+        // Preserve existing track selections if they're still valid for this source,
+        // otherwise fall back to all tracks.
+        const currentAudioTracks = s.settings.audio.tracks ?? audioTracks;
+        const currentSubtitleTracks = s.settings.subtitle.tracks ?? subTracks;
+        settings.audio.tracks = currentAudioTracks.filter((t) => audioTracks.includes(t)) || audioTracks;
+        settings.audio.track = s.settings.audio.track >= 0 && audioTracks.includes(s.settings.audio.track)
+          ? s.settings.audio.track
+          : (audioTracks[0] ?? 0);
+        settings.subtitle.tracks = currentSubtitleTracks.filter((t) => subTracks.includes(t)) || subTracks;
+        settings.subtitle.track = s.settings.subtitle.track >= 0 && subTracks.includes(s.settings.subtitle.track)
+          ? s.settings.subtitle.track
+          : (subTracks[0] ?? 0);
       }
       return { settings, presetId: preset.id, ...previewReset };
     }),

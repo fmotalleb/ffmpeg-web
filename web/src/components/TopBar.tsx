@@ -77,6 +77,16 @@ export function TopBar() {
     useStore.setState({ batchDir: useStore.getState().browserDir });
   };
 
+  const handleChooseFile = () => {
+    // When choosing a video file, we want to browse video files and target the source.
+    // This is different from adding extra audio/subtitle tracks.
+    useStore.setState({
+      browserOpen: true,
+      browserKind: "video",
+      browserTarget: "source",
+    });
+  };
+
   return (
     <>
       <header className="topbar">
@@ -95,7 +105,7 @@ export function TopBar() {
           Star the project
         </a>
         <div className="topbar-actions">
-          <button className="btn" onClick={() => setBrowserOpen(true)}>
+          <button className="btn" onClick={handleChooseFile}>
             Choose file on server
           </button>
           <button className="btn" onClick={handleFolder}>

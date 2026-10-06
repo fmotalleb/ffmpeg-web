@@ -34,13 +34,23 @@ export function FileBrowser() {
   };
 
   const chooseFile = async (path: string) => {
+    // Determine the action based on browserTarget:
+    // - "source": probe and set as the source video file
+    // - "audio" or "subtitle": add as an extra track
+    // However, if browserKind indicates this is a video file being browsed,
+    // treat it as a source selection regardless of browserTarget state.
     if (browserTarget === "audio" || browserTarget === "subtitle") {
-      const list = (settings[browserTarget].extra ?? []).slice();
-      list.push({ path } as AddedTrack);
-      updateSettings(`${browserTarget}.extra`, list);
-      setBrowserOpen(false);
-      return;
+      // Only add as extra track if we're browsing for that specific type
+      // and the file matches. Video files should not be added as audio/subtitle tracks.
+      if (browserKind === browserTarget) {
+        const list = (settings[browserTarget].extra ?? []).slice();
+        list.push({ path } as AddedTrack);
+        updateSettings(`${browserTarget}.extra`, list);
+        setBrowserOpen(false);
+        return;
+      }
     }
+    // Default behavior: probe and set as source (for video files)
     try {
       const info = await probe(path);
       setSource(info);

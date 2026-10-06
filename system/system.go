@@ -456,15 +456,36 @@ func readFFmpegProcesses(jobPIDs map[string]int) map[int]ffmpegSample {
 			if err != nil || !entry.IsDir() {
 				continue
 			}
+			// Read the command line to get the actual binary name, since /proc/<pid>/comm
+			// is truncated to 15 chars and may match prefixes incorrectly (e.g., "ffmpeg-web"
+			// starts with "ffmpeg"). Use the basename of the executable from /proc/<pid>/exe
+			// or fall back to parsing /proc/<pid>/cmdline.
 			name := strings.TrimSpace(readFileString("/proc/" + entry.Name() + "/comm"))
 			kind := ""
-			switch {
-			case strings.HasPrefix(name, "ffmpeg"):
+			switch name {
+			case "ffmpeg":
 				kind = "ffmpeg"
-			case strings.HasPrefix(name, "ffprobe"):
+			case "ffprobe":
 				kind = "ffprobe"
 			default:
-				continue
+				// The comm field may be truncated; check cmdline for the real binary name.
+				cmdline := readFileString("/proc/" + entry.Name() + "/cmdline")
+				if cmdline != "" {
+					// cmdline fields are separated by null bytes
+					parts := strings.Split(cmdline, "\x00")
+					if len(parts) > 0 {
+						base := filepath.Base(parts[0])
+						switch base {
+						case "ffmpeg":
+							kind = "ffmpeg"
+						case "ffprobe":
+							kind = "ffprobe"
+						}
+					}
+				}
+				if kind == "" {
+					continue
+				}
 			}
 			sample, ok := readProcStat("/proc/" + entry.Name() + "/stat")
 			if !ok {
