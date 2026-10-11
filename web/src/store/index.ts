@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Job, Spec } from "../types";
 import { codecForEncoder } from "../utils";
+import { loadNotifyOnDone, saveNotifyOnDone } from "../notify";
 import { defaultQueueSettings, defaultSettings, normalizeSpec } from "./defaults";
 import type { AppState } from "./appState";
 
@@ -23,6 +24,7 @@ export const useStore = create<AppState>((set, _get) => ({
   previewTime: 0,
   previewDur: 0.5,
   previewFrames: { time: 0, sourceURL: null, targetURL: null, targetIsFinal: false },
+  previewBase: null,
   diff: {
     overlayIsTarget: true,
     magnifier: false,
@@ -53,6 +55,7 @@ export const useStore = create<AppState>((set, _get) => ({
   // The queue is a drawer, not the main view: it starts closed and opens
   // itself when something is queued (see setJobs/updateJob).
   queueCollapsed: true,
+  notifyOnDone: loadNotifyOnDone(),
   encoders: { kinds: [], libraries: [] },
 
   setSource: (info) =>
@@ -203,6 +206,7 @@ export const useStore = create<AppState>((set, _get) => ({
   setPreviewTime: (t) => set({ previewTime: t }),
   setPreviewDur: (d) => set({ previewDur: d }),
   setPreviewFrames: (f) => set({ previewFrames: f }),
+  setPreviewBase: (spec) => set({ previewBase: spec }),
   setDiffMode: (mode) =>
     set((s) => ({ diff: { ...s.diff, mode } })),
   setDiffPlaying: (playing) =>
@@ -223,6 +227,10 @@ export const useStore = create<AppState>((set, _get) => ({
   setRailCollapsed: (c) => set({ railCollapsed: c }),
   setQueueSettingsOpen: (o) => set({ queueSettingsOpen: o }),
   setQueueCollapsed: (c) => set({ queueCollapsed: c }),
+  setNotifyOnDone: (v) => {
+    saveNotifyOnDone(v);
+    set({ notifyOnDone: v });
+  },
   setEncoders: (c) =>
     set((s) => {
       // Keep the chosen library valid: if the current pick is missing from the

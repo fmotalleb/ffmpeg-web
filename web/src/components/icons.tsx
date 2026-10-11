@@ -40,6 +40,19 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8.5 8.5v5M11.5 8.5v5" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M10 3.5a4 4 0 0 0-4 4c0 3.5-1.5 4.5-1.5 4.5h11S14 11 14 7.5a4 4 0 0 0-4-4Z" />
+      <path d="M8.5 15a1.7 1.7 0 0 0 3 0" />
+    </>
+  ),
+  bellOff: (
+    <>
+      <path d="M10 3.5a4 4 0 0 0-4 4c0 3.5-1.5 4.5-1.5 4.5h11S14 11 14 7.5a4 4 0 0 0-4-4Z" />
+      <path d="M8.5 15a1.7 1.7 0 0 0 3 0" />
+      <path d="M3.5 3.5 16.5 16.5" />
+    </>
+  ),
 };
 
 export function Icon({

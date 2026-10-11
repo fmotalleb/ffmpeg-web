@@ -2041,6 +2041,43 @@ code {
   color: var(--ink-dim);
 }
 
+/* The base-config control sits at the end of the subject row, kept out of the
+   way of the filename. */
+.preview-base-ctl {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preview-base-chip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--teal);
+  background: rgba(89, 191, 176, 0.14);
+  border: 1px solid rgba(89, 191, 176, 0.5);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+/* Seek buttons are meant to be hit constantly and take almost no room: a fixed
+   narrow width keeps the row from shifting as the labels change. */
+.seek-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.seek-btn {
+  min-width: 46px;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
 .time-field input[type="text"] { width: 110px; }
 
 .diff-stage {

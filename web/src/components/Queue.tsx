@@ -1,5 +1,6 @@
 import { useStore } from "../store";
 import { api, toast } from "../api";
+import { requestNotificationPermission } from "../notify";
 import { JobRow } from "./job";
 import { Icon } from "./icons";
 import { formatDuration } from "../utils";
@@ -12,6 +13,26 @@ export function Queue() {
   const setQueuePaused = useStore((s) => s.setQueuePaused);
   const queueCollapsed = useStore((s) => s.queueCollapsed);
   const setQueueCollapsed = useStore((s) => s.setQueueCollapsed);
+  const notifyOnDone = useStore((s) => s.notifyOnDone);
+  const setNotifyOnDone = useStore((s) => s.setNotifyOnDone);
+
+  // Turning alerts on needs a user gesture for the browser to grant the
+  // notification permission (and let audio start), so the request happens here
+  // rather than on load. A denial still leaves the in-app toast + sound.
+  const toggleNotify = async () => {
+    if (notifyOnDone) {
+      setNotifyOnDone(false);
+      return;
+    }
+    const granted = await requestNotificationPermission();
+    setNotifyOnDone(true);
+    toast(
+      granted
+        ? "You'll be notified when a job finishes"
+        : "Alerts on — browser notifications were declined, so you'll get the in-app toast and a sound",
+      granted,
+    );
+  };
 
   const jobsArray = Array.from(jobs.values());
 
@@ -144,6 +165,19 @@ export function Queue() {
           >
             <Icon name="import" />
             Import
+          </button>
+          <button
+            className={`btn btn-small${notifyOnDone ? " btn-primary" : " btn-quiet"}`}
+            onClick={toggleNotify}
+            title={
+              notifyOnDone
+                ? "Alerting on finish — click to turn it off"
+                : "Alert me with a notification and a sound when a job finishes"
+            }
+            aria-pressed={notifyOnDone}
+          >
+            <Icon name={notifyOnDone ? "bell" : "bellOff"} />
+            {notifyOnDone ? "Alerts on" : "Alerts off"}
           </button>
           <button
             className="btn btn-small btn-quiet"

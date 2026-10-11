@@ -66,16 +66,39 @@ function currentPreviewSubject() {
   }
 
   if (s.source) {
+    const base = s.previewBase;
+    // With a base config pinned, the left side renders that snapshot through
+    // the same preview endpoint as the right — so the comparison becomes
+    // "the settings I saved vs. the settings I'm editing" rather than
+    // "the untouched file vs. the result". Without a base, the left side is
+    // the original file, decoded straight from disk.
+    const baseClip = (t: number, w: number, signal?: AbortSignal) =>
+      loadFrameOrClipPost("/api/preview/clip", {
+        input: s.source!.path,
+        time: t,
+        duration: dur,
+        width: w || 0,
+        spec: base,
+      }, signal);
+    const baseFrame = (t: number, w: number, signal?: AbortSignal) =>
+      loadFrameOrClipPost("/api/preview/frame", {
+        input: s.source!.path,
+        time: t,
+        width: w || 0,
+        spec: base,
+      }, signal);
     return {
-      label: s.source.name,
+      label: base ? `${s.source.name} — comparing saved base` : s.source.name,
       duration: s.source.duration || 0,
       fps: s.source.video ? s.source.video.fps : 0,
       targetIsFinal: false,
-      sourceClip: (t: number, w: number, signal?: AbortSignal) =>
-        loadFrameOrClip(
-          `/api/clip?path=${encodeURIComponent(s.source!.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`,
-          signal,
-        ),
+      sourceClip: base
+        ? baseClip
+        : (t: number, w: number, signal?: AbortSignal) =>
+            loadFrameOrClip(
+              `/api/clip?path=${encodeURIComponent(s.source!.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`,
+              signal,
+            ),
       targetClip: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClipPost("/api/preview/clip", {
           input: s.source!.path,
@@ -84,11 +107,13 @@ function currentPreviewSubject() {
           width: w || 0,
           spec: s.settings,
         }, signal),
-      sourceFrame: (t: number, w: number, signal?: AbortSignal) =>
-        loadFrameOrClip(
-          `/api/frame?path=${encodeURIComponent(s.source!.path)}&time=${t}${w ? "&width=" + w : ""}`,
-          signal,
-        ),
+      sourceFrame: base
+        ? baseFrame
+        : (t: number, w: number, signal?: AbortSignal) =>
+            loadFrameOrClip(
+              `/api/frame?path=${encodeURIComponent(s.source!.path)}&time=${t}${w ? "&width=" + w : ""}`,
+              signal,
+            ),
       targetFrame: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClipPost("/api/preview/frame", {
           input: s.source!.path,
@@ -236,6 +261,7 @@ export function PreviewPanel() {
   // Load diff frames — only depends on the values that determine the URL,
   // not on previewTime (which changes every slider tick).
   // Uses a ref for previewTime so it always reads the latest value.
+  const previewBase = useStore((s) => s.previewBase);
   const loadSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const loadDiffFrames = useCallback(async () => {
@@ -284,13 +310,13 @@ export function PreviewPanel() {
       clearTimeout(loadTimerRef.current);
       abortRef.current?.abort();
     };
-  }, [previewTime, previewDur, previewJobId, diff.syncOffset, settings, loadDiffFrames]);
+  }, [previewTime, previewDur, previewJobId, diff.syncOffset, settings, previewBase, loadDiffFrames]);
 
   // Immediate load on source change (no debounce)
   useEffect(() => {
     frameCacheClear();
     loadDiffFrames();
-  }, [source, previewJobId, loadDiffFrames]);
+  }, [source, previewJobId, previewBase, loadDiffFrames]);
 
   // Play/pause sync
   const syncPlayAll = () => {
@@ -317,12 +343,13 @@ export function PreviewPanel() {
   const [flickerLabel, setFlickerLabel] = useState("Result");
   useEffect(() => {
     if (diff.mode === "flicker" && previewFrames.sourceURL && previewFrames.targetURL) {
+      const left = useStore.getState().previewBase ? "Base" : "Source";
       let showResult = true;
       setFlickerLabel("Result");
       flickerTimerRef.current = setInterval(() => {
         showResult = !showResult;
         flickerShowingResult.current = showResult;
-        setFlickerLabel(showResult ? "Result" : "Source");
+        setFlickerLabel(showResult ? "Result" : left);
         if (baseVideoRef.current)
           baseVideoRef.current.style.visibility = showResult ? "hidden" : "visible";
         if (overlayVideoRef.current)
@@ -545,6 +572,31 @@ export function PreviewPanel() {
     useStore.getState().setPreviewTime(clampNum(t, 0, limit || t));
   }, []);
 
+  // Jump by whole seconds, clamped to the timeline like everything else.
+  const seekBy = useCallback((delta: number) => {
+    const meta = subjectMetaRef.current;
+    const limit = meta.duration > 0 ? seekLimit(meta.duration, meta.fps) : meta.duration;
+    useStore.getState().setPreviewTime(clampNum(previewTimeRef.current + delta, 0, limit || Infinity));
+  }, []);
+
+  // The time box holds what the user is typing until they commit it (Enter or
+  // clicking away); until then the playhead's own value is shown. Keeping a
+  // draft is what makes the field editable — a directly-controlled input would
+  // be rewritten on every keystroke.
+  const [timeDraft, setTimeDraft] = useState<string | null>(null);
+  const commitTime = useCallback((raw: string) => {
+    setTimeDraft(null);
+    const text = raw.trim();
+    if (!text) return;
+    // Accept "90", "1:30", "1:30.5", "0:01:30.500".
+    const parts = text.split(":").map(Number);
+    if (parts.some((n) => Number.isNaN(n))) return;
+    const secs = parts.reduce((a, n) => a * 60 + n, 0);
+    const meta = subjectMetaRef.current;
+    const limit = meta.duration > 0 ? seekLimit(meta.duration, meta.fps) : secs;
+    useStore.getState().setPreviewTime(clampNum(secs, 0, limit));
+  }, []);
+
   const thumbSourceMode = useStore((s) => s.thumbSourceMode);
 
   const generateScreenlist = useCallback(async () => {
@@ -624,6 +676,9 @@ export function PreviewPanel() {
 
   // The picture sits at the top of the tab with the timeline directly under it,
   // so scrubbing never means scrolling past the toolbars first.
+  // When a base config is pinned the left side is no longer the untouched
+  // source file, so the labels say so.
+  const leftLabel = previewBase ? "Base" : "Source";
   const stage = diff.mode !== "side-by-side" ? (
     <div ref={diffStageRef} className="diff-stage">
       {!hasFrames && (
@@ -633,13 +688,13 @@ export function PreviewPanel() {
       )}
       {hasFrames && diff.mode === "split" && (
         <>
-          <span className="original-label" style={{ left: "8px" }}>Source</span>
+          <span className="original-label" style={{ left: "8px" }}>{leftLabel}</span>
           <span className="result-label" style={{ right: "8px" }}>Result</span>
         </>
       )}
       {hasFrames && diff.mode === "overlay" && (
         <span className="overlay-info-label">
-          Source (behind) / Result (front, {diff.opacity}%)
+          {leftLabel} (behind) / Result (front, {diff.opacity}%)
         </span>
       )}
       {hasFrames && diff.mode === "flicker" && (
@@ -649,7 +704,7 @@ export function PreviewPanel() {
       )}
       {hasFrames && diff.mode === "difference" && (
         <span className="diff-info-label">
-          Source vs Result — pixel difference
+          {leftLabel} vs Result — pixel difference
         </span>
       )}
       {hasFrames && (
@@ -696,7 +751,7 @@ export function PreviewPanel() {
         hidden={!diff.magnifier}
       >
         <span className={`diff-lens-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
-          {magnifierShowsTarget ? "Result" : "Source"}
+          {magnifierShowsTarget ? "Result" : leftLabel}
         </span>
       </div>
       <canvas
@@ -709,7 +764,7 @@ export function PreviewPanel() {
     <div className="diff-sbs">
       <figure className="sbs-source">
         <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
-        <figcaption>Source</figcaption>
+        <figcaption>{leftLabel}</figcaption>
       </figure>
       <figure className="sbs-result">
         <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
@@ -739,6 +794,35 @@ export function PreviewPanel() {
             {source ? `Previewing: ${source.name}` : "Pick a source to preview."}
           </span>
         )}
+        {source && !previewJobId && (
+          <span className="preview-base-ctl">
+            {previewBase ? (
+              <>
+                <span className="preview-base-chip" title="The left side is the settings you saved, not the original file.">
+                  Base saved
+                </span>
+                <button
+                  className="btn btn-small btn-quiet"
+                  onClick={() => useStore.getState().setPreviewBase(null)}
+                  title="Go back to comparing against the original file"
+                >
+                  Clear base
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn btn-small btn-quiet"
+                onClick={() => {
+                  useStore.getState().setPreviewBase(structuredClone(useStore.getState().settings));
+                  toast("Saved the current settings as the preview base", true);
+                }}
+                title="Pin the current settings as the left side, so you can keep tweaking and compare against this exact config"
+              >
+                Set as base
+              </button>
+            )}
+          </span>
+        )}
       </div>
 
       {stage}
@@ -764,25 +848,46 @@ export function PreviewPanel() {
         </label>
       </div>
       <div className="toolbar">
-        <button className="btn btn-quiet" onClick={() => stepFrame(-1)}>
-          {"\u27e8"} Frame
-        </button>
+        <div className="seek-group" role="group" aria-label="Seek backward">
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(-10)} title="Back 10 seconds">
+            {"\u2212"}10s
+          </button>
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(-5)} title="Back 5 seconds">
+            {"\u2212"}5s
+          </button>
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(-1)} title="Back 1 second">
+            {"\u2212"}1s
+          </button>
+        </div>
         <label className="field time-field">
           <span>Time</span>
           <input
             type="text"
-            value={formatPreciseTime(previewTime)}
+            value={timeDraft ?? formatPreciseTime(previewTime)}
+            onChange={(e) => setTimeDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              const parts = (e.target as HTMLInputElement).value.split(":").map(Number);
-              if (parts.some(isNaN)) return;
-              const secs = parts.reduce((a, n) => a * 60 + n, 0);
-              const limit = subjectMeta.duration ? seekLimit(subjectMeta.duration, subjectMeta.fps) : secs;
-              useStore.getState().setPreviewTime(clampNum(secs, 0, limit));
+              if (e.key === "Enter") commitTime((e.target as HTMLInputElement).value);
+              else if (e.key === "Escape") setTimeDraft(null);
             }}
+            onBlur={(e) => commitTime(e.target.value)}
             placeholder="0:00.00"
+            title="Type a time and press Enter — seconds (90), m:ss (1:30) or h:mm:ss all work"
           />
         </label>
+        <div className="seek-group" role="group" aria-label="Seek forward">
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(1)} title="Forward 1 second">
+            +1s
+          </button>
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(5)} title="Forward 5 seconds">
+            +5s
+          </button>
+          <button className="btn btn-small btn-quiet seek-btn" onClick={() => seekBy(10)} title="Forward 10 seconds">
+            +10s
+          </button>
+        </div>
+        <button className="btn btn-quiet" onClick={() => stepFrame(-1)}>
+          {"\u27e8"} Frame
+        </button>
         <button className="btn btn-quiet" onClick={() => stepFrame(1)}>
           Frame {"\u27e9"}
         </button>
@@ -876,7 +981,7 @@ export function PreviewPanel() {
         </label>
         {diff.magnifier && (
           <span className={`diff-mag-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
-            Viewing: {magnifierShowsTarget ? "Result" : "Source"}
+            Viewing: {magnifierShowsTarget ? "Result" : leftLabel}
           </span>
         )}
         <button
@@ -913,16 +1018,18 @@ export function PreviewPanel() {
       )}
 
       <p className="note" id="diff-note">
-        {previewFrames.targetIsFinal
-          ? "The result clip is from the actual encoded file."
-          : "The result clip is a live preview of the current settings \u2014 actual compression will look slightly softer."}
+        {previewBase
+          ? "Both sides are live previews: the left is the settings you saved as base, the right is the current settings."
+          : previewFrames.targetIsFinal
+            ? "The result clip is from the actual encoded file."
+            : "The result clip is a live preview of the current settings \u2014 actual compression will look slightly softer."}
       </p>
       <div className="diff-downloads">
         <button
           className="btn btn-small btn-quiet"
-          onClick={() => downloadURL(previewFrames.sourceURL, `source-${frameFileStamp(previewFrames.time)}.jpg`)}
+          onClick={() => downloadURL(previewFrames.sourceURL, `${previewBase ? "base" : "source"}-${frameFileStamp(previewFrames.time)}.jpg`)}
         >
-          Download source
+          Download {previewBase ? "base" : "source"}
         </button>
         <button
           className="btn btn-small btn-quiet"

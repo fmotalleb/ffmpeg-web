@@ -21,6 +21,7 @@ import { FfmpegLogViewer } from "./components/modals/FfmpegLogViewer";
 import { FfmpegProcessViewer } from "./components/modals/FfmpegProcessViewer";
 import { Toast } from "./components/Toast";
 import { ApiQueue } from "./components/api/ApiQueue";
+import { notifyJobFinished } from "./notify";
 import type { EncoderCatalog, Job, Snapshot } from "./types";
 
 export function App() {
@@ -39,6 +40,9 @@ export function App() {
   } = useStore();
 
   const presetsLoaded = useRef(false);
+  // Last seen status per job, so the SSE handler can tell a job that just
+  // finished from one we've already reported.
+  const lastStatusRef = useRef(new Map<string, string>());
 
   // Toast handler
   useEffect(() => {
@@ -80,19 +84,35 @@ export function App() {
 
     source.addEventListener("snapshot", (e) => {
       const data: Snapshot = JSON.parse(e.data);
-      setJobs(data.jobs || []);
+      const list = data.jobs || [];
+      // Rebuild (not merge) the status map, and seed it without firing alerts —
+      // jobs already finished before this page loaded aren't news.
+      lastStatusRef.current = new Map(list.map((j) => [j.id, j.status]));
+      setJobs(list);
       if (typeof data.paused === "boolean") setQueuePaused(data.paused);
       if (data.settings) setQueueSettings(data.settings);
     });
 
     source.addEventListener("job", (e) => {
       const job: Job = JSON.parse(e.data);
+      const prev = lastStatusRef.current.get(job.id);
+      lastStatusRef.current.set(job.id, job.status);
+      // Only a transition into a finished state is worth an alert; the first
+      // sight of a job that is already done (reconnect) is not.
+      const finished = job.status === "done" || job.status === "failed";
+      const wasActive = prev === "queued" || prev === "running";
+      if (finished && wasActive && useStore.getState().notifyOnDone) {
+        notifyJobFinished(job);
+      }
       updateJob(job);
     });
 
     source.addEventListener("queue", (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.removed) removeJob(msg.removed);
+      if (msg.removed) {
+        lastStatusRef.current.delete(msg.removed);
+        removeJob(msg.removed);
+      }
       if (typeof msg.paused === "boolean") setQueuePaused(msg.paused);
       if (msg.settings) setQueueSettings(msg.settings);
       if (msg.order) reorderJobs(msg.order);

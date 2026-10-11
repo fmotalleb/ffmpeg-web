@@ -27,6 +27,12 @@ export interface AppState {
     targetURL: string | null;
     targetIsFinal: boolean;
   };
+  /**
+   * A settings snapshot pinned as the left-hand side of the preview, so the
+   * comparison can be "base config vs. what I just changed" instead of always
+   * "original file vs. result". Null means the original file is the base.
+   */
+  previewBase: Spec | null;
   diff: {
     overlayIsTarget: boolean;
     magnifier: boolean;
@@ -55,6 +61,8 @@ export interface AppState {
   railCollapsed: boolean;
   queueSettingsOpen: boolean;
   queueCollapsed: boolean;
+  /** Desktop + sound alert when a queued job finishes. Opt-in. */
+  notifyOnDone: boolean;
   encoders: EncoderCatalog;
 
   setSource: (info: MediaInfo) => void;
@@ -76,6 +84,7 @@ export interface AppState {
   setPreviewTime: (t: number) => void;
   setPreviewDur: (d: number) => void;
   setPreviewFrames: (f: AppState["previewFrames"]) => void;
+  setPreviewBase: (spec: Spec | null) => void;
   setDiffMode: (m: AppState["diff"]["mode"]) => void;
   setDiffPlaying: (p: boolean) => void;
   setThumbSourceMode: (m: "source" | "target") => void;
@@ -91,6 +100,7 @@ export interface AppState {
   setRailCollapsed: (c: boolean) => void;
   setQueueSettingsOpen: (o: boolean) => void;
   setQueueCollapsed: (c: boolean) => void;
+  setNotifyOnDone: (v: boolean) => void;
   setEncoders: (c: EncoderCatalog) => void;
   fitToSource: () => void;
 }
