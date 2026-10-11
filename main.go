@@ -21,6 +21,7 @@ import (
 
 	"github.com/fmotalleb/ffmpeg-web/ffmpeg"
 	"github.com/fmotalleb/ffmpeg-web/jobs"
+	"github.com/fmotalleb/ffmpeg-web/keepawake"
 	"github.com/fmotalleb/ffmpeg-web/server"
 	"github.com/fmotalleb/ffmpeg-web/storage"
 	"github.com/fmotalleb/ffmpeg-web/system"
@@ -65,9 +66,14 @@ func main() {
 	// Initialize job management
 	broker := jobs.NewBroker()
 	hooks := jobs.NewHookRunner(logger.Named("hooks"), processed.AllowCmds, processed.OutDir)
+	// When enabled, the machine is held awake for as long as an encode runs.
+	keeper := keepawake.New(processed.KeepAwake, logger.Named("keepawake"))
+	if keeper.Enabled() {
+		logger.Info("keep-awake is on — the machine will not sleep while an encode runs")
+	}
 	manager := jobs.NewManager(
 		processed.FFmpeg, processed.FFProbe, processed.WorkDir,
-		broker, store, hooks, logger.Named("queue"),
+		broker, store, hooks, keeper, logger.Named("queue"),
 	)
 	recovered := manager.Restore(snap)
 	store.Start(manager.Snapshot)
@@ -245,5 +251,6 @@ func processConfig(cfg *Config) (*ProcessedConfig, error) {
 		AllowCmds: cfg.AllowCommands,
 		AuthUser:  authUser,
 		AuthPass:  authPass,
+		KeepAwake: cfg.KeepAwake,
 	}, nil
 }

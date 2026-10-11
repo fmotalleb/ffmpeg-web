@@ -19,7 +19,7 @@ import (
 func testJobServer(t *testing.T) *server {
 	t.Helper()
 	dir := t.TempDir()
-	manager := jobs.NewManager("", "", dir, jobs.NewBroker(), &storage.Store{}, nil, zap.NewNop())
+	manager := jobs.NewManager("", "", dir, jobs.NewBroker(), &storage.Store{}, nil, nil, zap.NewNop())
 	return &server{mediaRoot: dir, outDir: dir, jobs: manager}
 }
 

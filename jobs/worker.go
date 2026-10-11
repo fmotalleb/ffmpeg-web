@@ -181,6 +181,8 @@ func (m *Manager) commitInPlace(job *storage.Job) error {
 
 func (m *Manager) run(job *storage.Job) {
 	ctx, cancel := context.WithCancel(context.Background())
+	// Hold the machine awake for the whole encode; finish releases it.
+	m.keeper.Acquire()
 
 	m.mu.Lock()
 	job.Status = storage.StatusRunning
@@ -324,6 +326,9 @@ func (m *Manager) finish(job *storage.Job, ctx context.Context, runErr error) {
 	m.publish(job)
 	m.save()
 	m.nudge()
+	// Everything (encode, verify, move, auto-delete) is done: let the machine
+	// sleep again.
+	m.keeper.Release()
 }
 
 func encodedLength(job *storage.Job) float64 {

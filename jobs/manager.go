@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/fmotalleb/ffmpeg-web/ffmpeg"
+	"github.com/fmotalleb/ffmpeg-web/keepawake"
 	"github.com/fmotalleb/ffmpeg-web/proc"
 	"github.com/fmotalleb/ffmpeg-web/storage"
 )
@@ -35,10 +36,17 @@ type Manager struct {
 	workDir string
 	seq     atomic.Uint64
 
+	// keeper holds the machine awake while an encode runs. Never nil — a
+	// disabled holder is a no-op — so the worker can call it unconditionally.
+	keeper *keepawake.Holder
+
 	ranSinceIdle bool
 }
 
-func NewManager(ffmpegBin, ffprobeBin, workDir string, broker *Broker, store *storage.Store, hooks *HookRunner, log *zap.Logger) *Manager {
+func NewManager(ffmpegBin, ffprobeBin, workDir string, broker *Broker, store *storage.Store, hooks *HookRunner, keeper *keepawake.Holder, log *zap.Logger) *Manager {
+	if keeper == nil { // callers that do not care pass nil
+		keeper = keepawake.New(false, nil)
+	}
 	m := &Manager{
 		jobs:     map[string]*storage.Job{},
 		settings: storage.DefaultSettings(),
@@ -50,6 +58,7 @@ func NewManager(ffmpegBin, ffprobeBin, workDir string, broker *Broker, store *st
 		ffmpeg:   ffmpegBin,
 		ffprobe:  ffprobeBin,
 		workDir:  workDir,
+		keeper:   keeper,
 	}
 	return m
 }

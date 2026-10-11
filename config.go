@@ -18,6 +18,9 @@ type Config struct {
 	MaxUpload     uint64 `arg:"max-upload" env:"MAX_UPLOAD_SIZE" default:"17179869184" help:"largest accepted upload in bytes (default: 16GB)"`
 	AllowCommands bool   `arg:"allow-commands" env:"ALLOW_COMMAND" default:"false" help:"let the post-queue action run a shell command"`
 	BasicAuth     string `arg:"basic-auth" arg_short:"u" env:"BASIC_AUTH" default:"" help:"basic auth credentials in format username:password"`
+
+	// Keep the machine from sleeping while an encode runs (Windows and Linux).
+	KeepAwake bool `arg:"keep-awake" env:"KEEP_AWAKE" default:"false" help:"stop the machine from going to sleep while an encode is running (Windows and Linux)"`
 }
 
 // ProcessedConfig contains validated and processed configuration
@@ -34,4 +37,5 @@ type ProcessedConfig struct {
 	AllowCmds bool
 	AuthUser  string
 	AuthPass  string
+	KeepAwake bool
 }
