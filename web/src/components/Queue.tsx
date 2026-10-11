@@ -1,6 +1,6 @@
 import { useStore } from "../store";
 import { api, toast } from "../api";
-import { JobRow } from "./JobRow";
+import { JobRow } from "./job";
 import { Icon } from "./icons";
 import { formatDuration } from "../utils";
 

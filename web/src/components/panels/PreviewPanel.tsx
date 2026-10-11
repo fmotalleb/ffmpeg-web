@@ -7,6 +7,7 @@ import {
   formatDuration,
   formatPreciseTime,
   frameFileStamp,
+  isAbortError,
   loadFrameOrClip,
   seekLimit,
 } from "../../utils";
@@ -24,14 +25,16 @@ function currentPreviewSubject() {
         duration: job.duration || 0,
         fps: (job as unknown as Record<string, number>).fps || 0,
         targetIsFinal: job.status === "done",
-        sourceClip: (t: number, w: number) =>
+        sourceClip: (t: number, w: number, signal?: AbortSignal) =>
           loadFrameOrClip(
             `/api/jobs/${job.id}/clip?which=source&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`,
+            signal,
           ),
-        targetClip: (t: number, w: number) =>
+        targetClip: (t: number, w: number, signal?: AbortSignal) =>
           job.status === "done"
             ? loadFrameOrClip(
                 `/api/jobs/${job.id}/clip?which=output&time=${t + off}&duration=${dur}${w ? "&width=" + w : ""}`,
+                signal,
               )
             : loadFrameOrClipPost("/api/preview/clip", {
                 input: job.source,
@@ -39,22 +42,24 @@ function currentPreviewSubject() {
                 duration: dur,
                 width: w || 0,
                 spec: job.spec,
-              }),
-        sourceFrame: (t: number, w: number) =>
+              }, signal),
+        sourceFrame: (t: number, w: number, signal?: AbortSignal) =>
           loadFrameOrClip(
             `/api/jobs/${job.id}/frame?which=source&time=${t}${w ? "&width=" + w : ""}`,
+            signal,
           ),
-        targetFrame: (t: number, w: number) =>
+        targetFrame: (t: number, w: number, signal?: AbortSignal) =>
           job.status === "done"
             ? loadFrameOrClip(
                 `/api/jobs/${job.id}/frame?which=output&time=${t}${w ? "&width=" + w : ""}`,
+                signal,
               )
             : loadFrameOrClipPost("/api/preview/frame", {
                 input: job.source,
                 time: t,
                 width: w || 0,
                 spec: job.spec,
-              }),
+              }, signal),
       };
     }
     s.previewJobId = null;
@@ -66,35 +71,37 @@ function currentPreviewSubject() {
       duration: s.source.duration || 0,
       fps: s.source.video ? s.source.video.fps : 0,
       targetIsFinal: false,
-      sourceClip: (t: number, w: number) =>
+      sourceClip: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClip(
           `/api/clip?path=${encodeURIComponent(s.source!.path)}&time=${t}&duration=${dur}${w ? "&width=" + w : ""}`,
+          signal,
         ),
-      targetClip: (t: number, w: number) =>
+      targetClip: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClipPost("/api/preview/clip", {
           input: s.source!.path,
           time: t + off,
           duration: dur,
           width: w || 0,
           spec: s.settings,
-        }),
-      sourceFrame: (t: number, w: number) =>
+        }, signal),
+      sourceFrame: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClip(
           `/api/frame?path=${encodeURIComponent(s.source!.path)}&time=${t}${w ? "&width=" + w : ""}`,
+          signal,
         ),
-      targetFrame: (t: number, w: number) =>
+      targetFrame: (t: number, w: number, signal?: AbortSignal) =>
         loadFrameOrClipPost("/api/preview/frame", {
           input: s.source!.path,
           time: t,
           width: w || 0,
           spec: s.settings,
-        }),
+        }, signal),
     };
   }
   return null;
 }
 
-async function loadFrameOrClipPost(url: string, body: unknown) {
+async function loadFrameOrClipPost(url: string, body: unknown, signal?: AbortSignal) {
   const key = url + "|" + JSON.stringify(body);
   const cached = frameCacheGet(key);
   if (cached) return cached;
@@ -102,6 +109,7 @@ async function loadFrameOrClipPost(url: string, body: unknown) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -229,7 +237,11 @@ export function PreviewPanel() {
   // not on previewTime (which changes every slider tick).
   // Uses a ref for previewTime so it always reads the latest value.
   const loadSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   const loadDiffFrames = useCallback(async () => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     const subject = currentPreviewSubject();
     if (!subject || !subject.duration) {
       useStore.getState().setPreviewFrames({ time: 0, sourceURL: null, targetURL: null, targetIsFinal: false });
@@ -247,12 +259,13 @@ export function PreviewPanel() {
     const seq = ++loadSeqRef.current;
     try {
       const [sourceURL, targetURL] = await Promise.all([
-        subject.sourceClip(t, width),
-        subject.targetClip(t, width),
+        subject.sourceClip(t, width, ctrl.signal),
+        subject.targetClip(t, width, ctrl.signal),
       ]);
       if (seq !== loadSeqRef.current) return;
       useStore.getState().setPreviewFrames({ time: t, sourceURL, targetURL, targetIsFinal: subject.targetIsFinal });
     } catch (err: unknown) {
+      if (isAbortError(err)) return;
       if (seq !== loadSeqRef.current) return;
       toast((err as Error).message);
     }
@@ -267,7 +280,10 @@ export function PreviewPanel() {
     // Clear cache when settings/preset changes to force reload from server
     if (settings) frameCacheClear();
     loadTimerRef.current = setTimeout(loadDiffFrames, 80);
-    return () => clearTimeout(loadTimerRef.current);
+    return () => {
+      clearTimeout(loadTimerRef.current);
+      abortRef.current?.abort();
+    };
   }, [previewTime, previewDur, previewJobId, diff.syncOffset, settings, loadDiffFrames]);
 
   // Immediate load on source change (no debounce)
@@ -505,6 +521,10 @@ export function PreviewPanel() {
         e.preventDefault();
       } else if (e.key.toLowerCase() === "s") {
         useStore.setState((s) => ({ diff: { ...s.diff, overlayIsTarget: !s.diff.overlayIsTarget } }));
+      } else if (e.key.toLowerCase() === "z") {
+        // Toggle magnifier on/off
+        useStore.setState((s) => ({ diff: { ...s.diff, magnifier: !s.diff.magnifier } }));
+        e.preventDefault();
       } else if (e.key.toLowerCase() === "f") {
         const d = diffRef.current.mode;
         const target = d === "side-by-side"
@@ -670,7 +690,15 @@ export function PreviewPanel() {
           <span />
         </div>
       )}
-      <div ref={lensRef} className="diff-lens" hidden={!diff.magnifier} />
+      <div
+        ref={lensRef}
+        className={`diff-lens ${magnifierShowsTarget ? "is-result" : "is-source"}`}
+        hidden={!diff.magnifier}
+      >
+        <span className={`diff-lens-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
+          {magnifierShowsTarget ? "Result" : "Source"}
+        </span>
+      </div>
       <canvas
         ref={diffCanvasRef}
         className="diff-canvas"
@@ -679,11 +707,11 @@ export function PreviewPanel() {
     </div>
   ) : (
     <div className="diff-sbs">
-      <figure>
+      <figure className="sbs-source">
         <video ref={sbsSourceRef} muted playsInline loop src={previewFrames.sourceURL || ""} />
         <figcaption>Source</figcaption>
       </figure>
-      <figure>
+      <figure className="sbs-result">
         <video ref={sbsTargetRef} muted playsInline loop src={previewFrames.targetURL || ""} />
         <figcaption>Result</figcaption>
       </figure>
@@ -847,7 +875,7 @@ export function PreviewPanel() {
           <span>Magnifier — click to switch, scroll to zoom</span>
         </label>
         {diff.magnifier && (
-          <span className="diff-mag-label">
+          <span className={`diff-mag-label ${magnifierShowsTarget ? "is-result" : "is-source"}`}>
             Viewing: {magnifierShowsTarget ? "Result" : "Source"}
           </span>
         )}
@@ -917,6 +945,18 @@ export function PreviewPanel() {
             Download difference
           </button>
         )}
+      </div>
+
+      <h3 className="group-title">Hotkeys</h3>
+      <div className="hotkeys-grid">
+        <div className="hotkey"><kbd>Space</kbd><span>Play/Pause</span></div>
+        <div className="hotkey"><kbd>←</kbd><kbd>→</kbd><span>Step frame</span></div>
+        <div className="hotkey"><kbd>[</kbd><kbd>]</kbd><span>Sync offset</span></div>
+        <div className="hotkey"><kbd>S</kbd><span>Swap source/target</span></div>
+        <div className="hotkey"><kbd>Z</kbd><span>Toggle magnifier</span></div>
+        <div className="hotkey"><kbd>F</kbd><span>Fullscreen</span></div>
+        <div className="hotkey"><kbd>Scroll</kbd><span>Zoom magnifier</span></div>
+        <div className="hotkey"><kbd>Click</kbd><span>Switch magnifier source</span></div>
       </div>
 
       <h3 className="group-title">Screenlist Generator</h3>

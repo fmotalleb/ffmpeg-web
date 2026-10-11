@@ -49,11 +49,12 @@ export function TrimRange() {
   useEffect(() => {
     if (!path || duration <= 0) return;
     let live = true;
+    const ctrl = new AbortController();
     const timer = setTimeout(async () => {
       try {
         const [a, b] = await Promise.all([
-          loadFrameOrClip(frameURL(path, start, 240)),
-          loadFrameOrClip(frameURL(path, end, 240)),
+          loadFrameOrClip(frameURL(path, start, 240), ctrl.signal),
+          loadFrameOrClip(frameURL(path, end, 240), ctrl.signal),
         ]);
         if (!live) return;
         setFrames({ key: framesKey, start: a, end: b });
@@ -65,6 +66,7 @@ export function TrimRange() {
     return () => {
       live = false;
       clearTimeout(timer);
+      ctrl.abort();
     };
   }, [path, duration, start, end, framesKey]);
 
@@ -72,8 +74,10 @@ export function TrimRange() {
   useEffect(() => {
     if (!held || !path) return;
     let live = true;
+    const ctrl = new AbortController();
     const timer = setTimeout(async () => {
-      try {          const url = await loadFrameOrClip(frameURL(path, held === "start" ? start : end, 200));
+      try {
+        const url = await loadFrameOrClip(frameURL(path, held === "start" ? start : end, 200), ctrl.signal);
         if (live) setTipFrame(url);
       } catch {
         /* keep whatever frame is already showing */
@@ -82,6 +86,7 @@ export function TrimRange() {
     return () => {
       live = false;
       clearTimeout(timer);
+      ctrl.abort();
     };
   }, [held, path, start, end]);
 

@@ -109,8 +109,12 @@ input[type="checkbox"] {
   appearance: none;
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  flex: none;
+  aspect-ratio: 1;
   border: 1.5px solid var(--line);
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--bg);
   cursor: pointer;
   position: relative;
@@ -182,6 +186,12 @@ a.btn-star:hover {
   border-radius: var(--radius);
   white-space: nowrap;
 }
+/* Result reads as the orange accent, source as teal, so the two are never
+   confused at a glance. */
+.diff-mag-label.is-result {
+  color: var(--amber);
+  background: rgba(224,165,86,0.12);
+}
 
 /* ---------- original / overlay labels ---------- */
 
@@ -202,8 +212,8 @@ a.btn-star:hover {
   letter-spacing: 0.03em;
 }
 
-.original-label { top: 8px; }
-.result-label { top: 8px; }
+.original-label { top: 8px; color: var(--teal); background: rgba(89,191,176,0.12); }
+.result-label { top: 8px; color: var(--amber); background: rgba(224,165,86,0.16); }
 .overlay-info-label { bottom: 8px; left: 8px; }
 .flicker-label { top: 8px; left: 50%; transform: translateX(-50%); }
 .diff-info-label { bottom: 8px; left: 50%; transform: translateX(-50%); }
@@ -317,8 +327,9 @@ a.btn-star:hover {
   top: calc(100% + 8px);
   right: 0;
   z-index: 15; /* over the settings, under a modal (20) */
-  width: 330px;
-  max-height: 70vh;
+  /* Widen enough for the process tables, but never off the edge of the window. */
+  width: min(400px, calc(100vw - 24px));
+  max-height: 78vh;
   overflow-y: auto;
   padding: 14px 16px;
   background: var(--panel);
@@ -350,6 +361,14 @@ a.btn-star:hover {
   padding-bottom: 4px;
 }
 .hw-note { font-size: 12.5px; color: var(--ink-dim); margin: 0; }
+.hw-section-tools { display: inline-flex; align-items: center; gap: 8px; }
+.hw-kill-all {
+  padding: 1px 8px;
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--rose);
+}
 
 .hw-row {
   display: flex;
@@ -368,20 +387,59 @@ a.btn-star:hover {
 }
 .hw-row .hw-value.strong { color: var(--ink); }
 
-/* The process line under a job, so it reads as belonging to that job. */
-.hw-job { padding: 2px 0; }
-.hw-job + .hw-job {
-  margin-top: 5px;
-  padding-top: 7px;
-  border-top: 1px solid var(--line-soft);
+/* Each process is its own small table: a head line, then label/value rows, so
+   a long list of counters lines up instead of wrapping into the one above it. */
+.hw-proc {
+  margin-top: 8px;
+  padding: 7px 9px 8px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
 }
-.hw-row.hw-sub {
-  padding: 1px 0 0;
+.hw-proc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hw-proc-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+.hw-proc-kind { font-weight: 600; }
+.hw-proc-pid { color: var(--ink-dim); }
+.hw-proc-actions { display: inline-flex; flex: none; gap: 6px; }
+.hw-proc-btn {
+  padding: 1px 8px;
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.hw-proc-label {
+  margin: 3px 0 6px;
+  font-size: 11.5px;
+  color: var(--ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hw-proc-table {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
   font-family: var(--mono);
   font-size: 11.5px;
 }
-.hw-row.hw-sub > span:first-child { color: var(--ink-dim); }
-.hw-row.hw-sub .hw-value { font-size: 11.5px; white-space: normal; }
+.hw-proc-key { color: var(--ink-dim); }
+.hw-proc-val { color: var(--ink-dim); overflow-wrap: anywhere; }
+.hw-proc-val.strong { color: var(--ink); }
 
 .hw-item {
   display: flex;
@@ -605,6 +663,13 @@ a.btn-star:hover {
   color: var(--amber);
 }
 .preset-save .btn { justify-content: center; }
+.preset-empty {
+  margin: 0;
+  padding: 4px 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ink-dim);
+}
 
 .work {
   display: grid;
@@ -1202,6 +1267,7 @@ a.btn-star:hover {
   font-weight: 600;
 }
 .job-pct { color: var(--ink); font-weight: 500; }
+.job-calc { color: var(--ink-dim); font-style: italic; }
 
 .job-bar {
   height: 4px;
@@ -1275,8 +1341,6 @@ a.btn-star:hover {
 .job-ffmpeg-value { color: var(--ink); }
 .job-log-btn { padding: 1px 8px; font-size: 10.5px; }
 
-.hw-pid { display: inline-flex; align-items: center; gap: 6px; }
-.hw-log-btn { padding: 1px 8px; font-size: 10.5px; }
 
 .job-sparks {
   display: inline-flex;
@@ -1326,6 +1390,27 @@ a.btn-star:hover {
 
 /* ffmpeg log viewer: a terminal-style tail of one run's output. */
 .log-modal { width: min(880px, 100%); }
+.modal-card.process-modal { width: min(520px, 100%); }
+.proc-facts { display: flex; flex-direction: column; }
+/* The command line of the run, exactly as ffmpeg was handed it. */
+.proc-command {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.proc-command .group-title { margin: 0 0 8px; }
+.proc-command .cmd-preview {
+  max-height: 38vh;
+  overflow-y: auto;
+  font-size: 11.5px;
+}
+.proc-kill { margin-top: 14px; }
+.proc-confirm {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.proc-confirm-actions { display: flex; gap: 8px; margin-top: 8px; }
 .log-modal .modal-head h2 {
   display: flex;
   align-items: center;
@@ -1736,6 +1821,164 @@ code {
   background: var(--bg);
 }
 
+/* ---------- API queue monitor ---------- */
+
+.api-queue {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  z-index: 25;
+  width: 380px;
+  max-height: 200px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.api-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--raised);
+}
+
+.api-queue-title {
+  font-weight: 600;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 11px;
+}
+
+.api-queue-clear {
+  padding: 2px 8px;
+  font-size: 10px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+.api-queue-clear:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.api-queue-section {
+  padding: 6px 0;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.api-queue-section + .api-queue-section {
+  border-top: 1px solid var(--line-soft);
+}
+
+.api-queue-section-title {
+  display: block;
+  padding: 4px 12px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+
+.api-call-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.api-call-row.running {
+  color: var(--amber);
+}
+.api-call-row.success {
+  color: var(--teal);
+}
+.api-call-row.error {
+  color: var(--rose);
+}
+
+.api-method {
+  flex: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  min-width: 36px;
+}
+
+.api-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.api-duration {
+  flex: none;
+  color: var(--ink-dim);
+  min-width: 45px;
+  text-align: right;
+}
+
+.api-error {
+  flex: none;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+/* ---------- preview hotkeys ---------- */
+
+.hotkeys-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+
+.hotkey {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-dim);
+}
+
+.hotkey kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.hotkey span {
+  color: var(--ink-dim);
+}
+
 /* ---------- preview / compare tool ---------- */
 
 .preview-subject {
@@ -1806,6 +2049,27 @@ code {
   background-color: #05070a;
   box-shadow: 0 0 0 2000px rgba(5, 7, 10, 0.35), 0 4px 14px rgba(0, 0, 0, 0.5);
 }
+.diff-lens.is-result { border-color: var(--amber); }
+
+/* The lens covers the stage, so the "is this the result or the source?"
+   answer rides on top of the zoom area instead of living in the toolbar. */
+.diff-lens-label {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+  padding: 1px 7px;
+  border-radius: 8px;
+  white-space: nowrap;
+  background: rgba(5, 7, 10, 0.72);
+}
+.diff-lens-label.is-result { color: var(--amber); }
+.diff-lens-label.is-source { color: var(--teal); }
 
 .diff-empty {
   position: absolute;
@@ -1844,6 +2108,8 @@ code {
   overflow: hidden;
   display: flex;
 }
+.diff-sbs figure.sbs-source { border-color: rgba(89,191,176,0.45); }
+.diff-sbs figure.sbs-result { border-color: rgba(224,165,86,0.55); }
 .diff-sbs video { width: 100%; height: 100%; object-fit: contain; }
 .diff-sbs figcaption {
   position: absolute;
@@ -1855,6 +2121,8 @@ code {
   padding: 1px 6px;
   border-radius: 3px;
 }
+.diff-sbs .sbs-source figcaption { color: var(--teal); background: rgba(89,191,176,0.12); }
+.diff-sbs .sbs-result figcaption { color: var(--amber); background: rgba(224,165,86,0.16); }
 
 .diff-downloads {
   display: flex;

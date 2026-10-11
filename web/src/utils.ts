@@ -118,10 +118,14 @@ function frameCacheSet(key: string, url: string) {
   }
 }
 
-export async function loadFrameOrClip(url: string): Promise<string> {
+export function isAbortError(err: unknown): boolean {
+  return (err as { name?: string } | null | undefined)?.name === "AbortError";
+}
+
+export async function loadFrameOrClip(url: string, signal?: AbortSignal): Promise<string> {
   const cached = frameCacheGet(url);
   if (cached) return cached;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal });
   if (!res.ok) {
     const text = await res.text();
     let msg = text;

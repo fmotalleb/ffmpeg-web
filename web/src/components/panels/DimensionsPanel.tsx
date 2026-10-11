@@ -130,10 +130,12 @@ export function DimensionsPanel() {
       return;
     }
     let stale = false;
+    const ctrl = new AbortController();
     const t = setTimeout(async () => {
       try {
         const url = await loadFrameOrClip(
           `/api/frame?path=${encodeURIComponent(settings.input)}&time=${previewTime}&width=${FRAME_W}`,
+          ctrl.signal,
         );
         if (!stale) setFrameURL(url);
       } catch {
@@ -143,6 +145,7 @@ export function DimensionsPanel() {
     return () => {
       stale = true;
       clearTimeout(t);
+      ctrl.abort();
     };
   }, [settings.input, previewTime, srcW]);
 
