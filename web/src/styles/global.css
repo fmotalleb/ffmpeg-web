@@ -1847,12 +1847,63 @@ code {
   background: var(--raised);
 }
 
+.api-queue.collapsed .api-queue-header {
+  border-bottom: none;
+}
+
+.api-queue-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.api-queue-chevron {
+  display: inline-flex;
+  transition: transform 120ms ease;
+}
+.api-queue-chevron.is-collapsed {
+  transform: rotate(180deg);
+}
+
 .api-queue-title {
   font-weight: 600;
   color: var(--ink-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 11px;
+}
+
+.api-queue-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.api-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.api-badge.running {
+  color: var(--amber);
+}
+.api-badge.done {
+  color: var(--teal);
+}
+.api-badge.error {
+  color: var(--rose);
 }
 
 .api-queue-clear {

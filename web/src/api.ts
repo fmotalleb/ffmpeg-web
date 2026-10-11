@@ -12,77 +12,51 @@ export class ApiError extends Error {
   }
 }
 
-// Track active API calls for monitoring
-export interface ApiCallInfo {
-  id: string;
-  path: string;
-  method: string;
-  startTime: number;
-}
-
-const activeCalls = new Map<string, ApiCallInfo>();
-let callIdCounter = 0;
-
-function generateCallId(): string {
-  return `api-${++callIdCounter}-${Date.now()}`;
-}
-
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
-  const callId = generateCallId();
   const method = (options.method || "GET").toUpperCase();
-  
-  // Track the call as active
-  activeCalls.set(callId, { id: callId, path, method, startTime: Date.now() });
-  useApiMonitor.getState().addCall(path, method);
-  
+
+  // The monitor store mints the id — completing the call has to use the same
+  // one, or the entry is stuck in "running" forever.
+  const callId = useApiMonitor.getState().addCall(path, method);
+  const monitor = () => useApiMonitor.getState();
+
   try {
     const res = await fetch(path, {
       headers: options.body instanceof FormData ? {} : { "Content-Type": "application/json" },
       ...options,
     });
-    
+
     if (res.status === 204) {
-      activeCalls.delete(callId);
-      useApiMonitor.getState().completeCall(callId, "success");
+      monitor().completeCall(callId, "success");
       return null as T;
     }
-    
+
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
-    
+
     if (!res.ok) {
       const errorMsg = (data && data.error) || `request failed (${res.status})`;
       const error = new ApiError(errorMsg, (data && data.code) || "");
-      
+
       // Show toast for API errors
       toast(`API error: ${errorMsg}`, false);
-      
-      activeCalls.delete(callId);
-      useApiMonitor.getState().completeCall(callId, "error", errorMsg);
+
+      monitor().completeCall(callId, "error", errorMsg);
       throw error;
     }
-    
-    activeCalls.delete(callId);
-    useApiMonitor.getState().completeCall(callId, "success");
+
+    monitor().completeCall(callId, "success");
     return data as T;
   } catch (err) {
-    // Network errors or other non-API errors
-    if (err instanceof ApiError) {
-      throw err; // Already handled above
+    // Network errors or other non-API errors. An ApiError was already marked
+    // failed on its way out above, so only everything else lands here.
+    if (!(err instanceof ApiError)) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      toast(`API error: ${errorMsg}`, false);
+      monitor().completeCall(callId, "error", errorMsg);
     }
-    
-    const errorMsg = err instanceof Error ? err.message : "Unknown error";
-    toast(`API error: ${errorMsg}`, false);
-    
-    activeCalls.delete(callId);
-    useApiMonitor.getState().completeCall(callId, "error", errorMsg);
     throw err;
   }
-}
-
-// Get currently active API calls (for monitoring UI)
-export function getActiveApiCalls(): ApiCallInfo[] {
-  return Array.from(activeCalls.values());
 }
 
 export async function browse(path: string, kind: "video" | "audio" | "subtitle" = "video"): Promise<BrowseResponse> {

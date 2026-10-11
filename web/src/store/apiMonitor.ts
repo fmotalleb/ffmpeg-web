@@ -13,17 +13,28 @@ export interface ApiCall {
 interface ApiMonitorState {
   activeCalls: ApiCall[];
   completedCalls: ApiCall[];
+  // The panel is a heads-up display, not a workspace: it starts minimized so
+  // it never eats the screen, and the badges in the header carry the summary.
+  collapsed: boolean;
   addCall: (path: string, method: string) => string;
   completeCall: (id: string, status: "success" | "error", error?: string) => void;
-  clearCompleted: () => void;
+  setCollapsed: (c: boolean) => void;
+  clearAll: () => void;
 }
+
+// Keep enough history for the badges to be meaningful without letting the
+// list grow without bound during a long session.
+const MAX_COMPLETED = 100;
+
+let callSeq = 0;
 
 export const useApiMonitor = create<ApiMonitorState>((set) => ({
   activeCalls: [],
   completedCalls: [],
+  collapsed: true,
 
   addCall: (path, method) => {
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const id = `api-${++callSeq}-${Date.now()}`;
     const call: ApiCall = {
       id,
       path,
@@ -38,11 +49,11 @@ export const useApiMonitor = create<ApiMonitorState>((set) => ({
     return id;
   },
 
-  completeCall: (id, status, error) => {
+  completeCall: (id, status, error) =>
     set((state) => {
-      const activeCalls = state.activeCalls.filter((c) => c.id !== id);
       const call = state.activeCalls.find((c) => c.id === id);
-      if (!call) return { activeCalls };
+      // Already completed, or cleared while it was in flight: nothing to do.
+      if (!call) return {};
 
       const completed: ApiCall = {
         ...call,
@@ -52,13 +63,12 @@ export const useApiMonitor = create<ApiMonitorState>((set) => ({
       };
 
       return {
-        activeCalls,
-        completedCalls: [completed, ...state.completedCalls].slice(0, 50), // Keep last 50
+        activeCalls: state.activeCalls.filter((c) => c.id !== id),
+        completedCalls: [completed, ...state.completedCalls].slice(0, MAX_COMPLETED),
       };
-    });
-  },
+    }),
 
-  clearCompleted: () => {
-    set({ completedCalls: [] });
-  },
+  setCollapsed: (c) => set({ collapsed: c }),
+
+  clearAll: () => set({ activeCalls: [], completedCalls: [] }),
 }));
