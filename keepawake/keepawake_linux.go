@@ -3,6 +3,7 @@
 package keepawake
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"sync"
@@ -17,13 +18,14 @@ import (
 // holds an inhibition lock for its whole lifetime, and drops it the moment it
 // exits. We run it around a bare "sleep", which does nothing but keep the lock
 // held; releasing kills that child, and the kernel reaps it.
-func platformHold() (func(), error) {
+func platformHold(ctx context.Context) (func(), error) {
 	path, err := exec.LookPath("systemd-inhibit")
 	if err != nil {
 		return nil, errors.New("systemd-inhibit not found (needed to keep the machine awake)")
 	}
 
-	cmd := exec.Command(path,
+	cmd := exec.CommandContext(ctx,
+		path,
 		"--what=sleep:idle", // block suspend/hibernate and the idle screen
 		"--who=ffmpeg-web",
 		"--why=an encode is running",

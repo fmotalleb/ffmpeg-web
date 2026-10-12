@@ -182,7 +182,7 @@ func (m *Manager) commitInPlace(job *storage.Job) error {
 func (m *Manager) run(job *storage.Job) {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Hold the machine awake for the whole encode; finish releases it.
-	m.keeper.Acquire()
+	m.keeper.Acquire(ctx)
 
 	m.mu.Lock()
 	job.Status = storage.StatusRunning

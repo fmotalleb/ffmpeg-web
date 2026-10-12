@@ -3,6 +3,7 @@
 package keepawake
 
 import (
+	"context"
 	"errors"
 	"runtime"
 	"sync"
@@ -16,7 +17,7 @@ var (
 
 // Windows execution-state flags (winuser.h).
 const (
-	esContinuous    = 0x80000000
+	esContinuous     = 0x80000000
 	esSystemRequired = 0x00000001
 )
 
@@ -27,7 +28,7 @@ const (
 // hold lasts. Releasing closes done, which lets that goroutine clear the state
 // and unlock the thread; the caller waits for cleared so it knows the machine
 // is free to sleep again by the time Release returns.
-func platformHold() (func(), error) {
+func platformHold(_ context.Context) (func(), error) {
 	done := make(chan struct{})
 	ready := make(chan error, 1)
 	cleared := make(chan struct{})

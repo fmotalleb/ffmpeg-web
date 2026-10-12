@@ -4,6 +4,7 @@
 package keepawake
 
 import (
+	"context"
 	"sync"
 
 	"go.uber.org/zap"
@@ -37,7 +38,7 @@ func (h *Holder) Enabled() bool {
 
 // Acquire keeps the machine awake until Release. It is idempotent: calling it
 // while already held does nothing.
-func (h *Holder) Acquire() {
+func (h *Holder) Acquire(ctx context.Context) {
 	if h == nil || !h.enabled {
 		return
 	}
@@ -46,7 +47,7 @@ func (h *Holder) Acquire() {
 	if h.held {
 		return
 	}
-	release, err := platformHold()
+	release, err := platformHold(ctx)
 	if err != nil {
 		// A platform that cannot hold the machine awake now will not start
 		// working later, so turn the feature off for good and warn once —
