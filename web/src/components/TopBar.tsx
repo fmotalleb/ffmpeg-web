@@ -1,7 +1,9 @@
 import { useRef } from "react";
 import { useStore } from "../store";
 import { ApiError, api, toast } from "../api";
+import { askConfirm } from "../store/confirm";
 import { HardwareStatus } from "./hardware";
+import { ApiQueue } from "./api/ApiQueue";
 import { Icon } from "./icons";
 import type { MediaInfo } from "../types";
 
@@ -56,11 +58,19 @@ export function TopBar() {
         toast((err as Error).message);
         return;
       }
-      const question =
-        err.code === "output-is-source"
-          ? `${err.message}. The encode is written elsewhere first and swapped in when it finishes, so a failed run leaves the original alone.\n\nReplace it with the result?`
-          : `${err.message}. The existing file is written straight over — if the encode falls short, what was there is gone.\n\nOverwrite it?`;
-      if (!confirm(question)) return; // cancel: nothing is queued
+      const isSource = err.code === "output-is-source";
+      const replace = await askConfirm({
+        title: isSource ? "That is the source file" : "That name is already taken",
+        message: isSource
+          ? `${err.message}. The encode is written elsewhere first and swapped in when it finishes, so a failed run leaves the original alone.\n\nQueue it anyway and replace the source with the result?`
+          : `${err.message}. The existing file is written straight over — if the encode falls short, what was there is gone.`,
+        confirmLabel: isSource ? "Replace it with the result" : "Overwrite it",
+        cancelLabel: "Cancel",
+      });
+      if (!replace) {
+        toast("Nothing was queued", true);
+        return;
+      }
       try {
         await queue(true);
         toast("Added to the queue, replacing the file that was there", true);
@@ -125,6 +135,7 @@ export function TopBar() {
             onChange={handleUpload}
           />
           <span className="spacer" />
+          <ApiQueue />
           <HardwareStatus />
           <button
             className="btn btn-primary"

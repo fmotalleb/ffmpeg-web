@@ -3,13 +3,22 @@ import { useApiMonitor } from "./store/apiMonitor";
 
 // ApiError carries the server's own reason code, so a caller can tell one kind
 // of refusal from another — queueing a name that is already taken, for one.
+// The HTTP status travels along for callers that only care about the class of
+// failure (a 409 conflict, say).
 export class ApiError extends Error {
   readonly code: string;
-  constructor(message: string, code: string) {
+  readonly status: number;
+  constructor(message: string, code: string, status: number) {
     super(message);
     this.name = "ApiError";
     this.code = code;
+    this.status = status;
   }
+}
+
+interface ErrorPayload {
+  error?: string;
+  code?: string;
 }
 
 export async function api<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
@@ -32,16 +41,38 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
     }
 
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    let data: ErrorPayload | null = null;
+    let plainBody = false;
+    if (text) {
+      // A non-JSON body (a proxy page, basic-auth text) must still come back
+      // as an ApiError, or every caller's structured handling silently
+      // degrades to a generic failure.
+      try {
+        const parsed: unknown = JSON.parse(text);
+        data = typeof parsed === "object" && parsed !== null ? (parsed as ErrorPayload) : null;
+      } catch {
+        plainBody = true;
+      }
+    }
 
     if (!res.ok) {
-      const errorMsg = (data && data.error) || `request failed (${res.status})`;
-      const error = new ApiError(errorMsg, (data && data.code) || "");
+      const errorMsg =
+        (data && data.error) ||
+        (plainBody && text.trim() ? text.trim().slice(0, 200) : `request failed (${res.status})`);
+      const code = (data && data.code) || "";
+      const error = new ApiError(errorMsg, code, res.status);
 
-      // Show toast for API errors
-      toast(`API error: ${errorMsg}`, false);
-
+      // Record the failure before anything else: a throwing toast handler
+      // must never leave the call stuck as "running" in the monitor.
       monitor().completeCall(callId, "error", errorMsg);
+
+      // Conflicts the UI turns into a replace/cancel question belong to the
+      // caller — reporting them as an error here would tell the user the
+      // request failed before they have decided what to do about it.
+      if (!code.startsWith("output-")) {
+        toast(`API error: ${errorMsg}`, false);
+      }
+
       throw error;
     }
 
@@ -52,8 +83,8 @@ export async function api<T = unknown>(path: string, options: RequestInit = {}):
     // failed on its way out above, so only everything else lands here.
     if (!(err instanceof ApiError)) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error";
-      toast(`API error: ${errorMsg}`, false);
       monitor().completeCall(callId, "error", errorMsg);
+      toast(`API error: ${errorMsg}`, false);
     }
     throw err;
   }
@@ -94,9 +125,16 @@ export async function deletePreset(name: string): Promise<Preset[]> {
 let toastFn: ((msg: string, ok?: boolean) => void) | null = null;
 
 export function setToastHandler(fn: (msg: string, ok?: boolean) => void) {
+  // Registering `toast` itself would call its own handler, i.e. itself,
+  // forever — the renderer owns the handler and nothing else may take it.
+  if (fn === toast) return;
   toastFn = fn;
 }
 
 export function toast(message: string, ok = false) {
-  if (toastFn) toastFn(message, ok);
+  try {
+    if (toastFn) toastFn(message, ok);
+  } catch {
+    // A broken handler must not take down the caller reporting the failure.
+  }
 }

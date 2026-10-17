@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "./store";
-import { api, setToastHandler, toast as apiToast } from "./api";
+import { api, toast as apiToast } from "./api";
 import { TopBar } from "./components/TopBar";
 import { PresetsRail } from "./components/PresetsRail";
 import { SourceStrip } from "./components/SourceStrip";
@@ -19,8 +19,8 @@ import { BatchEncode } from "./components/modals/BatchEncode";
 import { ProbeViewer } from "./components/modals/ProbeViewer";
 import { FfmpegLogViewer } from "./components/modals/FfmpegLogViewer";
 import { FfmpegProcessViewer } from "./components/modals/FfmpegProcessViewer";
+import { ConfirmDialog } from "./components/modals/ConfirmDialog";
 import { Toast } from "./components/Toast";
-import { ApiQueue } from "./components/api/ApiQueue";
 import { notifyJobFinished } from "./notify";
 import type { EncoderCatalog, Job, Snapshot } from "./types";
 
@@ -43,11 +43,6 @@ export function App() {
   // Last seen status per job, so the SSE handler can tell a job that just
   // finished from one we've already reported.
   const lastStatusRef = useRef(new Map<string, string>());
-
-  // Toast handler
-  useEffect(() => {
-    setToastHandler(apiToast);
-  }, []);
 
   // Load config
   useEffect(() => {
@@ -164,8 +159,8 @@ export function App() {
       <ProbeViewer />
       <FfmpegLogViewer />
       <FfmpegProcessViewer />
+      <ConfirmDialog />
       <Toast />
-      <ApiQueue />
     </>
   );
 }
